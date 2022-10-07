@@ -1,12 +1,37 @@
+mod board;
+
 use bevy::prelude::*;
+use bevy_mod_picking::{DefaultPickingPlugins, PickingCameraBundle};
+use board::BoardPlugin;
 
 fn main() {
     App::new()
+        .insert_resource(WindowDescriptor {
+            title: "Schach!".to_string(),
+            width: 1200.0,
+            height: 800.0,
+            ..Default::default()
+        })
         .add_plugins(DefaultPlugins)
-        .add_system(hello_world_system)
+        .add_plugins(DefaultPickingPlugins)
+        .add_plugin(BoardPlugin)
+        .add_startup_system(setup)
         .run();
 }
 
-fn hello_world_system() {
-    println!("Hello world!");
+fn setup(mut commands: Commands) {
+    // Camera
+    commands
+        .spawn_bundle(Camera3dBundle {
+            transform: Transform::from_xyz(4.0, 10.0, 6.0)
+                .looking_at(Vec3::new(4.0, 0.0, -4.0), Vec3::Y),
+            ..default()
+        })
+        .insert_bundle(PickingCameraBundle::default());
+
+    // Light
+    commands.spawn_bundle(PointLightBundle {
+        transform: Transform::from_translation(Vec3::new(4.0, 8.0, 4.0)),
+        ..Default::default()
+    });
 }
