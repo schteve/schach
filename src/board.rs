@@ -32,10 +32,10 @@ enum SquareColor {
 }
 
 // (0, 0) is A1, (0, 7) is A8
-#[derive(Component)]
-struct Square {
-    row: u8,
-    col: u8,
+#[derive(Clone, Component, Copy)]
+pub struct Square {
+    pub row: u8,
+    pub col: u8,
 }
 
 impl Square {
@@ -44,6 +44,15 @@ impl Square {
             SquareColor::Black
         } else {
             SquareColor::White
+        }
+    }
+}
+
+impl From<(u8, u8)> for Square {
+    fn from(other: (u8, u8)) -> Self {
+        Self {
+            row: other.0,
+            col: other.1,
         }
     }
 }
