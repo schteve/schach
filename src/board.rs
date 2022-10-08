@@ -46,6 +46,13 @@ impl Square {
             SquareColor::White
         }
     }
+
+    pub fn world_coords(&self) -> Vec3 {
+        let x = self.col as f32 - 3.5;
+        let y = 0.25;
+        let z = -(self.row as f32 - 3.5);
+        Vec3::new(x, y, z)
+    }
 }
 
 impl From<(u8, u8)> for Square {
@@ -74,12 +81,12 @@ fn create_board(
 ) {
     // Every square on the board is the same shape - a square with some depth
     let square_mesh = meshes.add(Mesh::from(shape::Box {
-        min_x: 0.0,
-        max_x: 1.0,
+        min_x: -0.5,
+        max_x: 0.5,
         min_y: 0.0,
         max_y: 0.25,
-        min_z: 0.0,
-        max_z: 1.0,
+        min_z: -0.5,
+        max_z: 0.5,
     }));
 
     for row in 0..8 {
@@ -93,12 +100,8 @@ fn create_board(
                 .spawn_bundle(PbrBundle {
                     mesh: square_mesh.clone(),
                     material,
-                    transform: Transform::from_translation(Vec3::new(
-                        row as f32,
-                        0.0,
-                        -(col as f32),
-                    )),
-                    ..Default::default()
+                    transform: Transform::from_translation(sq.world_coords()),
+                    ..default()
                 })
                 .insert_bundle(PickableBundle::default())
                 .insert(sq);
@@ -110,7 +113,7 @@ fn create_board(
         .spawn_bundle(PbrBundle {
             mesh: meshes.add(Mesh::from(shape::Plane { size: 100.0 })),
             material: materials.background_color.clone(),
-            ..Default::default()
+            ..default()
         })
         .insert_bundle(PickableBundle::default());
 }
@@ -122,10 +125,10 @@ fn render_board(
     mut query: Query<(Entity, &Square, &mut Handle<StandardMaterial>)>,
 ) {
     for (entity, square, mut material) in query.iter_mut() {
-        if Some(entity) == hovered_square.entity {
-            *material = materials.hovered_color.clone();
-        } else if Some(entity) == selected_square.entity {
+        if Some(entity) == selected_square.entity {
             *material = materials.selected_color.clone();
+        } else if Some(entity) == hovered_square.entity {
+            *material = materials.hovered_color.clone();
         } else {
             match square.color() {
                 SquareColor::White => *material = materials.white_color.clone(),
@@ -152,7 +155,7 @@ fn select_square(
             },*/
             PickingEvent::Hover(e) => match e {
                 HoverEvent::JustEntered(e) => {
-                    if let Ok(_) = squares_query.get(*e) {
+                    if squares_query.get(*e).is_ok() {
                         hovered_square.entity = Some(*e);
                     } else {
                         hovered_square.entity = None;
@@ -167,7 +170,7 @@ fn select_square(
                 }
             },
             PickingEvent::Clicked(e) => {
-                if let Ok(_) = squares_query.get(*e) {
+                if squares_query.get(*e).is_ok() {
                     selected_square.entity = Some(*e);
                 } else {
                     selected_square.entity = None;
