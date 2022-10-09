@@ -64,16 +64,6 @@ impl From<(u8, u8)> for Square {
     }
 }
 
-#[derive(Default)]
-struct SelectedSquare {
-    entity: Option<Entity>,
-}
-
-#[derive(Default)]
-struct HoveredSquare {
-    entity: Option<Entity>,
-}
-
 fn create_board(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -138,45 +128,75 @@ fn render_board(
     }
 }
 
-fn select_square(
-    mut events: EventReader<PickingEvent>,
-    mut hovered_square: ResMut<HoveredSquare>,
-    mut selected_square: ResMut<SelectedSquare>,
+#[derive(Default)]
+struct HoveredSquare {
+    entity: Option<Entity>,
+}
+
+struct ClickSquareEvent {
+    kind: MouseButton,
+    entity: Option<Entity>,
+}
+
+fn click_square(
+    mut pick_events: EventReader<PickingEvent>,
+    mouse_button_inputs: Res<Input<MouseButton>>,
     squares_query: Query<&Square>,
+    mut hovered_square: ResMut<HoveredSquare>,
+    mut click_square_events: EventWriter<ClickSquareEvent>,
 ) {
-    for event in events.iter() {
+    for event in pick_events.iter() {
         match event {
-            /*PickingEvent::Selection(SelectionEvent::JustSelected(e)) => {
-                if let Ok(_) = squares_query.get(*e) {
-                    selected_square.entity = Some(*e);
+            PickingEvent::Hover(HoverEvent::JustEntered(e)) => {
+                if squares_query.get(*e).is_ok() {
+                    hovered_square.entity = Some(*e);
                 } else {
-                    selected_square.entity = None;
+                    hovered_square.entity = None;
                 }
-            },*/
-            PickingEvent::Hover(e) => match e {
-                HoverEvent::JustEntered(e) => {
-                    if squares_query.get(*e).is_ok() {
-                        hovered_square.entity = Some(*e);
-                    } else {
+            }
+            PickingEvent::Hover(HoverEvent::JustLeft(e)) => {
+                if let Some(prev_ent) = hovered_square.entity {
+                    if *e == prev_ent {
                         hovered_square.entity = None;
                     }
                 }
-                HoverEvent::JustLeft(e) => {
-                    if let Some(prev_ent) = hovered_square.entity {
-                        if *e == prev_ent {
-                            hovered_square.entity = None;
-                        }
-                    }
-                }
-            },
-            PickingEvent::Clicked(e) => {
-                if squares_query.get(*e).is_ok() {
-                    selected_square.entity = Some(*e);
-                } else {
-                    selected_square.entity = None;
-                }
             }
             _ => (),
+        }
+    }
+
+    if mouse_button_inputs.just_pressed(MouseButton::Left) {
+        click_square_events.send(ClickSquareEvent {
+            kind: MouseButton::Left,
+            entity: hovered_square.entity,
+        });
+    }
+    if mouse_button_inputs.just_pressed(MouseButton::Right) {
+        click_square_events.send(ClickSquareEvent {
+            kind: MouseButton::Right,
+            entity: hovered_square.entity,
+        });
+    }
+    if mouse_button_inputs.just_pressed(MouseButton::Middle) {
+        click_square_events.send(ClickSquareEvent {
+            kind: MouseButton::Middle,
+            entity: hovered_square.entity,
+        });
+    }
+}
+
+#[derive(Default)]
+struct SelectedSquare {
+    entity: Option<Entity>,
+}
+
+fn select_square(
+    mut events: EventReader<ClickSquareEvent>,
+    mut selected_square: ResMut<SelectedSquare>,
+) {
+    for event in events.iter() {
+        if event.kind == MouseButton::Left {
+            selected_square.entity = event.entity;
         }
     }
 }
@@ -186,10 +206,12 @@ pub struct BoardPlugin;
 impl Plugin for BoardPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system(create_board)
+            .add_system(click_square)
+            .init_resource::<HoveredSquare>()
+            .add_event::<ClickSquareEvent>()
             .add_system(render_board)
             .add_system(select_square)
-            .init_resource::<SquareMaterials>()
             .init_resource::<SelectedSquare>()
-            .init_resource::<HoveredSquare>();
+            .init_resource::<SquareMaterials>();
     }
 }
