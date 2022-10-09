@@ -3,7 +3,7 @@ mod pieces;
 
 use crate::{board::BoardPlugin, pieces::PiecesPlugin};
 use bevy::prelude::*;
-use bevy_mod_picking::{DefaultPickingPlugins, PickingCameraBundle};
+use bevy_mod_picking::{InteractablePickingPlugin, PickingCameraBundle, PickingPlugin};
 
 fn main() {
     App::new()
@@ -15,7 +15,8 @@ fn main() {
             ..default()
         })
         .add_plugins(DefaultPlugins)
-        .add_plugins(DefaultPickingPlugins)
+        .add_plugin(PickingPlugin)
+        .add_plugin(InteractablePickingPlugin)
         .add_plugin(BoardPlugin)
         .add_plugin(PiecesPlugin)
         .add_startup_system(setup)
