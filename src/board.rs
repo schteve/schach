@@ -1,6 +1,8 @@
 use bevy::prelude::*;
 use bevy_mod_picking::{HoverEvent, PickableBundle, PickingEvent};
 
+use crate::pieces::Piece;
+
 struct SquareMaterials {
     hovered_color: Handle<StandardMaterial>,
     selected_color: Handle<StandardMaterial>,
@@ -32,11 +34,14 @@ enum SquareColor {
 }
 
 // (0, 0) is A1, (0, 7) is A8
-#[derive(Clone, Component, Copy)]
+#[derive(Clone, Component, Copy, Eq, PartialEq)]
 pub struct Square {
     pub row: u8,
     pub col: u8,
 }
+
+// TODO: make a marker component to indicate squares and pieces, and make their constituents into components
+// e.g. Square is empty, Piece is empty. Location is used for Squares and Pieces.
 
 impl Square {
     fn color(&self) -> SquareColor {
@@ -110,12 +115,20 @@ fn create_board(
 
 fn render_board(
     hovered_square: Res<HoveredSquare>,
-    selected_square: Res<SelectedSquare>,
+    selected_piece: Res<SelectedPiece>,
     materials: Res<SquareMaterials>,
-    mut query: Query<(Entity, &Square, &mut Handle<StandardMaterial>)>,
+    mut sq_query: Query<(Entity, &Square, &mut Handle<StandardMaterial>)>,
+    piece_query: Query<&Piece>,
 ) {
-    for (entity, square, mut material) in query.iter_mut() {
-        if Some(entity) == selected_square.entity {
+    let piece_sq = if let Some(piece_ent) = selected_piece.entity {
+        let p = piece_query.get(piece_ent).unwrap();
+        Some(p.square)
+    } else {
+        None
+    };
+
+    for (entity, square, mut material) in sq_query.iter_mut() {
+        if Some(*square) == piece_sq {
             *material = materials.selected_color.clone();
         } else if Some(entity) == hovered_square.entity {
             *material = materials.hovered_color.clone();
@@ -201,6 +214,36 @@ fn select_square(
     }
 }
 
+#[derive(Default)]
+struct SelectedPiece {
+    entity: Option<Entity>,
+}
+
+fn select_piece(
+    selected_square: Res<SelectedSquare>,
+    squares_query: Query<&Square>,
+    pieces_query: Query<(Entity, &mut Piece)>,
+    mut selected_piece: ResMut<SelectedPiece>,
+) {
+    // Only do this stuff if a new square is selected
+    if !selected_square.is_changed() {
+        return;
+    }
+
+    if let Some(sq_ent) = selected_square.entity {
+        let sq = squares_query.get(sq_ent).unwrap();
+        selected_piece.entity = pieces_query.iter().find_map(|(entity, piece)| {
+            if piece.square == *sq {
+                Some(entity)
+            } else {
+                None
+            }
+        });
+    } else {
+        selected_piece.entity = None;
+    }
+}
+
 pub struct BoardPlugin;
 
 impl Plugin for BoardPlugin {
@@ -212,6 +255,8 @@ impl Plugin for BoardPlugin {
             .add_system(render_board)
             .add_system(select_square)
             .init_resource::<SelectedSquare>()
+            .add_system(select_piece)
+            .init_resource::<SelectedPiece>()
             .init_resource::<SquareMaterials>();
     }
 }

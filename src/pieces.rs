@@ -1,5 +1,6 @@
-use crate::board::Square;
 use bevy::prelude::*;
+
+use crate::board::Square;
 
 #[rustfmt::skip]
 const PIECE_TRANSFORMS: [Transform; 6] = [
@@ -96,10 +97,10 @@ enum PieceKind {
 }
 
 #[derive(Clone, Component, Copy)]
-struct Piece {
+pub struct Piece {
     color: PieceColor,
     kind: PieceKind,
-    square: Square,
+    pub square: Square,
 }
 
 #[rustfmt::skip]
