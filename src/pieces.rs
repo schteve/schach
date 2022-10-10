@@ -102,7 +102,7 @@ pub struct Piece {
     kind: PieceKind,
 }
 
-pub struct PieceConstData {
+struct PieceConstData {
     piece: Piece,
     pos: BoardPosition,
 }
@@ -189,7 +189,7 @@ fn spawn_piece(
         });
 }
 
-fn move_pieces(time: Res<Time>, mut query: Query<(&mut Transform, &Piece, &BoardPosition)>) {
+fn animate_pieces(time: Res<Time>, mut query: Query<(&mut Transform, &Piece, &BoardPosition)>) {
     for (mut transform, _piece, board_pos) in &mut query {
         let direction = board_pos.to_translation() - transform.translation;
         if direction.length() > 0.01 {
@@ -206,12 +206,38 @@ fn move_pieces(time: Res<Time>, mut query: Query<(&mut Transform, &Piece, &Board
     }
 }
 
+pub struct PieceMoveEvent {
+    entity: Entity,
+    target: BoardPosition,
+}
+
+impl PieceMoveEvent {
+    pub fn new(entity: Entity, target: BoardPosition) -> Self {
+        Self { entity, target }
+    }
+}
+
+fn move_pieces(
+    mut events: EventReader<PieceMoveEvent>,
+    mut piece_pos_query: Query<(Entity, &Piece, &mut BoardPosition)>,
+) {
+    for event in events.iter() {
+        for (entity, _piece, mut pos) in &mut piece_pos_query {
+            if event.entity == entity {
+                *pos = event.target;
+            }
+        }
+    }
+}
+
 pub struct PiecesPlugin;
 
 impl Plugin for PiecesPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system(create_pieces)
             .init_resource::<PiecesRenderData>()
-            .add_system(move_pieces);
+            .add_system(animate_pieces)
+            .add_system(move_pieces)
+            .add_event::<PieceMoveEvent>();
     }
 }

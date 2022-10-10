@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_mod_picking::{HoverEvent, PickableBundle, PickingEvent};
 
-use crate::pieces::Piece;
+use crate::pieces::{Piece, PieceMoveEvent};
 
 struct SquaresRenderData {
     hovered_color: Handle<StandardMaterial>,
@@ -45,7 +45,7 @@ pub struct BoardPosition {
 }
 
 impl BoardPosition {
-    fn color(&self) -> SquareColor {
+    fn square_color(&self) -> SquareColor {
         if (self.row + self.col) % 2 == 0 {
             SquareColor::Black
         } else {
@@ -79,7 +79,7 @@ fn create_board(
     for row in 0..8 {
         for col in 0..8 {
             let pos = BoardPosition { row, col };
-            let sq = Square(pos.color());
+            let sq = Square(pos.square_color());
             let material = match sq.0 {
                 SquareColor::White => materials.white_color.clone(), // TODO: do we need to clone here? Creating too many handles?
                 SquareColor::Black => materials.black_color.clone(),
@@ -223,6 +223,7 @@ fn select_piece(
     board_pos_query: Query<&BoardPosition>,
     piece_query: Query<(Entity, &Piece, &BoardPosition)>,
     mut selected_piece: ResMut<SelectedPiece>,
+    mut events: EventWriter<PieceMoveEvent>,
 ) {
     // Only do this stuff if a new square is selected
     if !selected_square.is_changed() {
@@ -230,18 +231,28 @@ fn select_piece(
     }
 
     if let Some(sq_ent) = selected_square.entity {
-        let pos = board_pos_query.get(sq_ent).unwrap();
-        selected_piece.entity =
-            piece_query.iter().find_map(
-                |(entity, _piece, board_pos)| {
-                    if board_pos == pos {
-                        Some(entity)
-                    } else {
-                        None
-                    }
-                },
-            );
+        // First find which position was selected
+        let select_pos = *board_pos_query.get(sq_ent).unwrap();
+        if selected_piece.entity.is_none() {
+            // Use the selected piece (if any) only if we didn't already have a piece selected
+            let piece_at_selection = piece_query.iter().find_map(|(entity, _piece, piece_pos)| {
+                if *piece_pos == select_pos {
+                    Some(entity)
+                } else {
+                    None
+                }
+            });
+            selected_piece.entity = piece_at_selection;
+        } else {
+            // If we already had a piece selected then move it to the newly selected position
+            events.send(PieceMoveEvent::new(
+                selected_piece.entity.unwrap(),
+                select_pos,
+            ));
+            selected_piece.entity = None;
+        }
     } else {
+        // Selected something that's not a square, remove the piece selection
         selected_piece.entity = None;
     }
 }
@@ -251,14 +262,14 @@ pub struct BoardPlugin;
 impl Plugin for BoardPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system(create_board)
+            .add_system(render_board)
+            .init_resource::<SquaresRenderData>()
             .add_system(click_square)
             .init_resource::<HoveredSquare>()
             .add_event::<ClickSquareEvent>()
-            .add_system(render_board)
             .add_system(select_square)
             .init_resource::<SelectedSquare>()
             .add_system(select_piece)
-            .init_resource::<SelectedPiece>()
-            .init_resource::<SquaresRenderData>();
+            .init_resource::<SelectedPiece>();
     }
 }
