@@ -174,10 +174,7 @@ fn spawn_piece(
     };
 
     commands
-        .spawn_bundle(PbrBundle {
-            transform: Transform::from_translation(board_pos.to_translation()),
-            ..default()
-        })
+        .spawn_bundle(PbrBundle::default())
         .insert(piece)
         .insert(board_pos)
         .with_children(|parent| {
@@ -192,11 +189,29 @@ fn spawn_piece(
         });
 }
 
+fn move_pieces(time: Res<Time>, mut query: Query<(&mut Transform, &Piece, &BoardPosition)>) {
+    for (mut transform, _piece, board_pos) in &mut query {
+        let direction = board_pos.to_translation() - transform.translation;
+        if direction.length() > 0.01 {
+            let speed = 5.0;
+            let step = direction.normalize() * time.delta_seconds() * speed;
+            // If it's only a small step then move the whole distance and no further
+            let step_to_use = if direction.length() > step.length() {
+                step
+            } else {
+                direction
+            };
+            transform.translation += step_to_use;
+        }
+    }
+}
+
 pub struct PiecesPlugin;
 
 impl Plugin for PiecesPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system(create_pieces)
-            .init_resource::<PiecesRenderData>();
+            .init_resource::<PiecesRenderData>()
+            .add_system(move_pieces);
     }
 }
