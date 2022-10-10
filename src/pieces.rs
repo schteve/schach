@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::board::Square;
+use crate::board::BoardPosition;
 
 #[rustfmt::skip]
 const PIECE_TRANSFORMS: [Transform; 6] = [
@@ -17,7 +17,7 @@ struct PiecePbr {
     transform: Transform,
 }
 
-struct PieceData {
+struct PiecesRenderData {
     king: PiecePbr,
     queen: PiecePbr,
     rook: PiecePbr,
@@ -28,7 +28,7 @@ struct PieceData {
     black_mat: Handle<StandardMaterial>,
 }
 
-impl FromWorld for PieceData {
+impl FromWorld for PiecesRenderData {
     fn from_world(world: &mut World) -> Self {
         // Load all the meshes
         // TODO: make the mesh path part of the const data table?
@@ -100,77 +100,92 @@ enum PieceKind {
 pub struct Piece {
     color: PieceColor,
     kind: PieceKind,
-    pub square: Square,
+}
+
+pub struct PieceConstData {
+    piece: Piece,
+    pos: BoardPosition,
 }
 
 #[rustfmt::skip]
-const STARTING_BOARD: [Piece; 32] = [
-    Piece { color: PieceColor::White, kind: PieceKind::Rook,    square: Square { row: 0, col: 0 } },
-    Piece { color: PieceColor::White, kind: PieceKind::Knight,  square: Square { row: 0, col: 1 } },
-    Piece { color: PieceColor::White, kind: PieceKind::Bishop,  square: Square { row: 0, col: 2 } },
-    Piece { color: PieceColor::White, kind: PieceKind::Queen,   square: Square { row: 0, col: 3 } },
-    Piece { color: PieceColor::White, kind: PieceKind::King,    square: Square { row: 0, col: 4 } },
-    Piece { color: PieceColor::White, kind: PieceKind::Bishop,  square: Square { row: 0, col: 5 } },
-    Piece { color: PieceColor::White, kind: PieceKind::Knight,  square: Square { row: 0, col: 6 } },
-    Piece { color: PieceColor::White, kind: PieceKind::Rook,    square: Square { row: 0, col: 7 } },
-    Piece { color: PieceColor::White, kind: PieceKind::Pawn,    square: Square { row: 1, col: 0 } },
-    Piece { color: PieceColor::White, kind: PieceKind::Pawn,    square: Square { row: 1, col: 1 } },
-    Piece { color: PieceColor::White, kind: PieceKind::Pawn,    square: Square { row: 1, col: 2 } },
-    Piece { color: PieceColor::White, kind: PieceKind::Pawn,    square: Square { row: 1, col: 3 } },
-    Piece { color: PieceColor::White, kind: PieceKind::Pawn,    square: Square { row: 1, col: 4 } },
-    Piece { color: PieceColor::White, kind: PieceKind::Pawn,    square: Square { row: 1, col: 5 } },
-    Piece { color: PieceColor::White, kind: PieceKind::Pawn,    square: Square { row: 1, col: 6 } },
-    Piece { color: PieceColor::White, kind: PieceKind::Pawn,    square: Square { row: 1, col: 7 } },
-    Piece { color: PieceColor::Black, kind: PieceKind::Rook,    square: Square { row: 7, col: 0 } },
-    Piece { color: PieceColor::Black, kind: PieceKind::Knight,  square: Square { row: 7, col: 1 } },
-    Piece { color: PieceColor::Black, kind: PieceKind::Bishop,  square: Square { row: 7, col: 2 } },
-    Piece { color: PieceColor::Black, kind: PieceKind::Queen,   square: Square { row: 7, col: 3 } },
-    Piece { color: PieceColor::Black, kind: PieceKind::King,    square: Square { row: 7, col: 4 } },
-    Piece { color: PieceColor::Black, kind: PieceKind::Bishop,  square: Square { row: 7, col: 5 } },
-    Piece { color: PieceColor::Black, kind: PieceKind::Knight,  square: Square { row: 7, col: 6 } },
-    Piece { color: PieceColor::Black, kind: PieceKind::Rook,    square: Square { row: 7, col: 7 } },
-    Piece { color: PieceColor::Black, kind: PieceKind::Pawn,    square: Square { row: 6, col: 0 } },
-    Piece { color: PieceColor::Black, kind: PieceKind::Pawn,    square: Square { row: 6, col: 1 } },
-    Piece { color: PieceColor::Black, kind: PieceKind::Pawn,    square: Square { row: 6, col: 2 } },
-    Piece { color: PieceColor::Black, kind: PieceKind::Pawn,    square: Square { row: 6, col: 3 } },
-    Piece { color: PieceColor::Black, kind: PieceKind::Pawn,    square: Square { row: 6, col: 4 } },
-    Piece { color: PieceColor::Black, kind: PieceKind::Pawn,    square: Square { row: 6, col: 5 } },
-    Piece { color: PieceColor::Black, kind: PieceKind::Pawn,    square: Square { row: 6, col: 6 } },
-    Piece { color: PieceColor::Black, kind: PieceKind::Pawn,    square: Square { row: 6, col: 7 } },
+const STARTING_BOARD: [PieceConstData; 32] = [
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Rook,   }, pos: BoardPosition { row: 0, col: 0 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Knight, }, pos: BoardPosition { row: 0, col: 1 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Bishop, }, pos: BoardPosition { row: 0, col: 2 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Queen,  }, pos: BoardPosition { row: 0, col: 3 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::King,   }, pos: BoardPosition { row: 0, col: 4 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Bishop, }, pos: BoardPosition { row: 0, col: 5 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Knight, }, pos: BoardPosition { row: 0, col: 6 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Rook,   }, pos: BoardPosition { row: 0, col: 7 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 1, col: 0 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 1, col: 1 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 1, col: 2 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 1, col: 3 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 1, col: 4 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 1, col: 5 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 1, col: 6 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 1, col: 7 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 6, col: 0 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 6, col: 1 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 6, col: 2 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 6, col: 3 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 6, col: 4 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 6, col: 5 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 6, col: 6 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 6, col: 7 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Rook,   }, pos: BoardPosition { row: 7, col: 0 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Knight, }, pos: BoardPosition { row: 7, col: 1 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Bishop, }, pos: BoardPosition { row: 7, col: 2 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Queen,  }, pos: BoardPosition { row: 7, col: 3 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::King,   }, pos: BoardPosition { row: 7, col: 4 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Bishop, }, pos: BoardPosition { row: 7, col: 5 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Knight, }, pos: BoardPosition { row: 7, col: 6 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Rook,   }, pos: BoardPosition { row: 7, col: 7 } },
 ];
 
-fn create_pieces(mut commands: Commands, piece_data: Res<PieceData>) {
-    for piece in STARTING_BOARD {
-        spawn_piece(&mut commands, &piece_data, piece);
+fn create_pieces(mut commands: Commands, piece_render_data: Res<PiecesRenderData>) {
+    for piece_data in STARTING_BOARD {
+        spawn_piece(
+            &mut commands,
+            piece_data.piece,
+            piece_data.pos,
+            &piece_render_data,
+        );
     }
 }
 
-fn spawn_piece(commands: &mut Commands, piece_data: &Res<PieceData>, piece: Piece) {
-    let data = match piece.kind {
-        PieceKind::King => &piece_data.king,
-        PieceKind::Queen => &piece_data.queen,
-        PieceKind::Bishop => &piece_data.bishop,
-        PieceKind::Knight => &piece_data.knight,
-        PieceKind::Rook => &piece_data.rook,
-        PieceKind::Pawn => &piece_data.pawn,
+fn spawn_piece(
+    commands: &mut Commands,
+    piece: Piece,
+    board_pos: BoardPosition,
+    render_data: &Res<PiecesRenderData>,
+) {
+    let pbr = match piece.kind {
+        PieceKind::King => &render_data.king,
+        PieceKind::Queen => &render_data.queen,
+        PieceKind::Bishop => &render_data.bishop,
+        PieceKind::Knight => &render_data.knight,
+        PieceKind::Rook => &render_data.rook,
+        PieceKind::Pawn => &render_data.pawn,
     };
     let mat = match piece.color {
-        PieceColor::White => &piece_data.white_mat,
-        PieceColor::Black => &piece_data.black_mat,
+        PieceColor::White => &render_data.white_mat,
+        PieceColor::Black => &render_data.black_mat,
     };
 
     commands
         .spawn_bundle(PbrBundle {
-            transform: Transform::from_translation(piece.square.world_coords()),
+            transform: Transform::from_translation(board_pos.to_translation()),
             ..default()
         })
         .insert(piece)
+        .insert(board_pos)
         .with_children(|parent| {
-            for mesh in &data.meshes {
+            for mesh in &pbr.meshes {
                 parent.spawn_bundle(PbrBundle {
                     mesh: mesh.clone(),
                     material: mat.clone(),
-                    transform: data.transform,
+                    transform: pbr.transform,
                     ..default()
                 });
             }
@@ -182,6 +197,6 @@ pub struct PiecesPlugin;
 impl Plugin for PiecesPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system(create_pieces)
-            .init_resource::<PieceData>();
+            .init_resource::<PiecesRenderData>();
     }
 }

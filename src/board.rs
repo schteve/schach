@@ -3,7 +3,7 @@ use bevy_mod_picking::{HoverEvent, PickableBundle, PickingEvent};
 
 use crate::pieces::Piece;
 
-struct SquareMaterials {
+struct SquaresRenderData {
     hovered_color: Handle<StandardMaterial>,
     selected_color: Handle<StandardMaterial>,
     //valid_movement_color: Handle<StandardMaterial>,
@@ -12,7 +12,7 @@ struct SquareMaterials {
     background_color: Handle<StandardMaterial>,
 }
 
-impl FromWorld for SquareMaterials {
+impl FromWorld for SquaresRenderData {
     fn from_world(world: &mut World) -> Self {
         let mut materials = world
             .get_resource_mut::<Assets<StandardMaterial>>()
@@ -28,22 +28,23 @@ impl FromWorld for SquareMaterials {
     }
 }
 
+#[derive(Clone, Copy)]
 enum SquareColor {
     White,
     Black,
 }
 
+#[derive(Clone, Component, Copy)]
+struct Square(SquareColor);
+
 // (0, 0) is A1, (0, 7) is A8
 #[derive(Clone, Component, Copy, Eq, PartialEq)]
-pub struct Square {
+pub struct BoardPosition {
     pub row: u8,
     pub col: u8,
 }
 
-// TODO: make a marker component to indicate squares and pieces, and make their constituents into components
-// e.g. Square is empty, Piece is empty. Location is used for Squares and Pieces.
-
-impl Square {
+impl BoardPosition {
     fn color(&self) -> SquareColor {
         if (self.row + self.col) % 2 == 0 {
             SquareColor::Black
@@ -52,7 +53,7 @@ impl Square {
         }
     }
 
-    pub fn world_coords(&self) -> Vec3 {
+    pub fn to_translation(self) -> Vec3 {
         let x = self.col as f32 - 3.5;
         let y = 0.25;
         let z = -(self.row as f32 - 3.5);
@@ -60,19 +61,10 @@ impl Square {
     }
 }
 
-impl From<(u8, u8)> for Square {
-    fn from(other: (u8, u8)) -> Self {
-        Self {
-            row: other.0,
-            col: other.1,
-        }
-    }
-}
-
 fn create_board(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
-    materials: Res<SquareMaterials>,
+    materials: Res<SquaresRenderData>,
 ) {
     // Every square on the board is the same shape - a square with some depth
     let square_mesh = meshes.add(Mesh::from(shape::Box {
@@ -86,20 +78,22 @@ fn create_board(
 
     for row in 0..8 {
         for col in 0..8 {
-            let sq = Square { row, col };
-            let material = match sq.color() {
-                SquareColor::White => materials.white_color.clone(),
+            let pos = BoardPosition { row, col };
+            let sq = Square(pos.color());
+            let material = match sq.0 {
+                SquareColor::White => materials.white_color.clone(), // TODO: do we need to clone here? Creating too many handles?
                 SquareColor::Black => materials.black_color.clone(),
             };
             commands
                 .spawn_bundle(PbrBundle {
                     mesh: square_mesh.clone(),
                     material,
-                    transform: Transform::from_translation(sq.world_coords()),
+                    transform: Transform::from_translation(pos.to_translation()),
                     ..default()
                 })
                 .insert_bundle(PickableBundle::default())
-                .insert(sq);
+                .insert(sq)
+                .insert(pos);
         }
     }
 
@@ -116,25 +110,30 @@ fn create_board(
 fn render_board(
     hovered_square: Res<HoveredSquare>,
     selected_piece: Res<SelectedPiece>,
-    materials: Res<SquareMaterials>,
-    mut sq_query: Query<(Entity, &Square, &mut Handle<StandardMaterial>)>,
-    piece_query: Query<&Piece>,
+    materials: Res<SquaresRenderData>,
+    mut square_query: Query<(
+        Entity,
+        &Square,
+        &BoardPosition,
+        &mut Handle<StandardMaterial>,
+    )>,
+    board_pos_query: Query<&BoardPosition>,
 ) {
-    let piece_sq = if let Some(piece_ent) = selected_piece.entity {
-        let p = piece_query.get(piece_ent).unwrap();
-        Some(p.square)
+    let piece_pos = if let Some(piece_ent) = selected_piece.entity {
+        let board_pos = board_pos_query.get(piece_ent).unwrap();
+        Some(board_pos)
     } else {
         None
     };
 
-    for (entity, square, mut material) in sq_query.iter_mut() {
-        if Some(*square) == piece_sq {
+    for (entity, square, pos, mut material) in &mut square_query {
+        if Some(pos) == piece_pos {
             *material = materials.selected_color.clone();
         } else if Some(entity) == hovered_square.entity {
             *material = materials.hovered_color.clone();
         } else {
-            match square.color() {
-                SquareColor::White => *material = materials.white_color.clone(),
+            match square.0 {
+                SquareColor::White => *material = materials.white_color.clone(), // TODO: don't clone materials?
                 SquareColor::Black => *material = materials.black_color.clone(),
             }
         }
@@ -221,8 +220,8 @@ struct SelectedPiece {
 
 fn select_piece(
     selected_square: Res<SelectedSquare>,
-    squares_query: Query<&Square>,
-    pieces_query: Query<(Entity, &mut Piece)>,
+    board_pos_query: Query<&BoardPosition>,
+    piece_query: Query<(Entity, &Piece, &BoardPosition)>,
     mut selected_piece: ResMut<SelectedPiece>,
 ) {
     // Only do this stuff if a new square is selected
@@ -231,14 +230,17 @@ fn select_piece(
     }
 
     if let Some(sq_ent) = selected_square.entity {
-        let sq = squares_query.get(sq_ent).unwrap();
-        selected_piece.entity = pieces_query.iter().find_map(|(entity, piece)| {
-            if piece.square == *sq {
-                Some(entity)
-            } else {
-                None
-            }
-        });
+        let pos = board_pos_query.get(sq_ent).unwrap();
+        selected_piece.entity =
+            piece_query.iter().find_map(
+                |(entity, _piece, board_pos)| {
+                    if board_pos == pos {
+                        Some(entity)
+                    } else {
+                        None
+                    }
+                },
+            );
     } else {
         selected_piece.entity = None;
     }
@@ -257,6 +259,6 @@ impl Plugin for BoardPlugin {
             .init_resource::<SelectedSquare>()
             .add_system(select_piece)
             .init_resource::<SelectedPiece>()
-            .init_resource::<SquareMaterials>();
+            .init_resource::<SquaresRenderData>();
     }
 }
