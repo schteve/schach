@@ -91,9 +91,9 @@ pub enum PieceColor {
 enum PieceKind {
     King,
     Queen,
+    Rook,
     Bishop,
     Knight,
-    Rook,
     Pawn,
 }
 
@@ -101,6 +101,87 @@ enum PieceKind {
 pub struct Piece {
     pub color: PieceColor,
     kind: PieceKind,
+}
+
+impl Piece {
+    pub fn valid_moves(
+        &self,
+        pos: BoardPosition,
+        piece_query: &Query<(&Piece, &BoardPosition)>,
+    ) -> Vec<BoardPosition> {
+        // TODO: handle check, en passant, castling, pawn 2-moves & captures
+        let pos_row = pos.row as i8;
+        let pos_col = pos.col as i8;
+        let mut output = Vec::new();
+        match self.kind {
+            PieceKind::King => {
+                for r in pos_row - 1..=pos_row + 1 {
+                    for c in pos_col - 1..=pos_col + 1 {
+                        if is_invalid(r, c, pos, self.color, piece_query) {
+                            continue;
+                        } else {
+                            output.push(BoardPosition::new(r as u8, c as u8));
+                        }
+                    }
+                }
+            }
+            PieceKind::Queen => todo!(),
+            PieceKind::Rook => todo!(),
+            PieceKind::Bishop => todo!(),
+            PieceKind::Knight => todo!(),
+            PieceKind::Pawn => {
+                let next_row = match self.color {
+                    PieceColor::White => 1,
+                    PieceColor::Black => -1,
+                };
+                let r = pos_row + next_row;
+                for c in pos_col - 1..=pos_col + 1 {
+                    if is_invalid(r, c, pos, self.color, piece_query) {
+                        continue;
+                    } else {
+                        output.push(BoardPosition::new(r as u8, c as u8));
+                    }
+                }
+            }
+        }
+        output
+    }
+}
+
+fn is_invalid(
+    row: i8,
+    col: i8,
+    pos: BoardPosition,
+    color: PieceColor,
+    piece_query: &Query<(&Piece, &BoardPosition)>,
+) -> bool {
+    is_out_of_bounds(row, col)
+        || is_non_move(row, col, pos)
+        || is_piece_blocking(row, col, color, piece_query)
+}
+
+fn is_out_of_bounds(row: i8, col: i8) -> bool {
+    !(0..8).contains(&row) || !(0..8).contains(&col)
+}
+
+fn is_non_move(row: i8, col: i8, pos: BoardPosition) -> bool {
+    pos == BoardPosition::new(row as u8, col as u8)
+}
+
+fn is_piece_blocking(
+    row: i8,
+    col: i8,
+    color: PieceColor,
+    query: &Query<(&Piece, &BoardPosition)>,
+) -> bool {
+    // You only get blocked by your own piece
+    for (piece, piece_pos) in query {
+        // TODO: this seems like a really slow way to access board state, do something about it?
+        if piece.color == color && *piece_pos == BoardPosition::new(row as u8, col as u8) {
+            return true;
+        }
+    }
+    false
 }
 
 struct PieceConstData {
@@ -164,9 +245,9 @@ fn spawn_piece(
     let pbr = match piece.kind {
         PieceKind::King => &render_data.king,
         PieceKind::Queen => &render_data.queen,
+        PieceKind::Rook => &render_data.rook,
         PieceKind::Bishop => &render_data.bishop,
         PieceKind::Knight => &render_data.knight,
-        PieceKind::Rook => &render_data.rook,
         PieceKind::Pawn => &render_data.pawn,
     };
     let mat = match piece.color {

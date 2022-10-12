@@ -6,7 +6,7 @@ use crate::pieces::{Piece, PieceColor, PieceMoveEvent};
 struct SquaresRenderData {
     hovered_color: Handle<StandardMaterial>,
     selected_color: Handle<StandardMaterial>,
-    //valid_movement_color: Handle<StandardMaterial>,
+    valid_move_color: Handle<StandardMaterial>,
     black_color: Handle<StandardMaterial>,
     white_color: Handle<StandardMaterial>,
     background_color: Handle<StandardMaterial>,
@@ -20,7 +20,7 @@ impl FromWorld for SquaresRenderData {
         Self {
             hovered_color: materials.add(Color::rgb(0.6, 0.3, 0.3).into()),
             selected_color: materials.add(Color::rgb(0.9, 0.1, 0.1).into()),
-            //valid_movement_color: materials.add(Color::rgb(0.3, 0.8, 0.3).into()),
+            valid_move_color: materials.add(Color::rgb(0.3, 0.8, 0.3).into()),
             black_color: materials.add(Color::rgb(0.1, 0.1, 0.1).into()),
             white_color: materials.add(Color::rgb(0.9, 0.9, 0.9).into()),
             background_color: materials.add(Color::rgb(0.5, 0.5, 0.5).into()),
@@ -45,6 +45,10 @@ pub struct BoardPosition {
 }
 
 impl BoardPosition {
+    pub fn new(row: u8, col: u8) -> Self {
+        Self { row, col }
+    }
+
     fn square_color(&self) -> SquareColor {
         if (self.row + self.col) % 2 == 0 {
             SquareColor::Black
@@ -106,27 +110,33 @@ fn create_board(
         .insert_bundle(PickableBundle::default());
 }
 
+#[allow(clippy::type_complexity)]
 fn render_board(
     hovered_square: Res<HoveredSquare>,
     turn_data: Res<TurnData>,
     materials: Res<SquaresRenderData>,
-    mut square_query: Query<(
-        Entity,
-        &Square,
-        &BoardPosition,
-        &mut Handle<StandardMaterial>,
-    )>,
+    mut square_query: Query<
+        (
+            Entity,
+            &BoardPosition,
+            Option<&ValidMove>,
+            &mut Handle<StandardMaterial>,
+        ),
+        With<Square>,
+    >,
     board_pos_query: Query<&BoardPosition>,
 ) {
     let piece_pos = turn_data
         .move_piece
         .and_then(|piece_ent| board_pos_query.get(piece_ent).ok());
 
-    for (entity, _, pos, mut material) in &mut square_query {
+    for (entity, pos, valid_move, mut material) in &mut square_query {
         if Some(pos) == piece_pos {
             *material = materials.selected_color.clone();
         } else if Some(entity) == hovered_square.entity {
             *material = materials.hovered_color.clone();
+        } else if valid_move.is_some() {
+            *material = materials.valid_move_color.clone();
         } else {
             match pos.square_color() {
                 SquareColor::White => *material = materials.white_color.clone(), // TODO: don't clone materials?
@@ -216,6 +226,9 @@ struct TurnData {
     move_target: Option<BoardPosition>,
 }
 
+#[derive(Component)]
+struct ValidMove;
+
 /*
                           ┌──────────────────────────────────────────┐
                           │                                          │
@@ -257,11 +270,15 @@ struct TurnData {
                  │ End turn         │
                  └──────────────────┘
  */
+#[allow(clippy::too_many_arguments)]
 fn turn_manager(
+    mut commands: Commands,
     mut turn: ResMut<Turn>,
     mut turn_data: ResMut<TurnData>,
     mut click_square_events: EventReader<ClickSquareEvent>,
     piece_query: Query<(Entity, &Piece, &BoardPosition)>,
+    square_query: Query<(Entity, &BoardPosition), With<Square>>,
+    board_query: Query<(&Piece, &BoardPosition)>,
     mut piece_move_events: EventWriter<PieceMoveEvent>,
 ) {
     match turn_data.state {
@@ -283,12 +300,13 @@ fn turn_manager(
             }
         }
         TurnState::ShowHighlights => {
-            /*
-                TODO: generate valid moves & highlight them
-                Store valid moves as a vec on turndata? or add a marker component for the piece or square?
-                leaning towards component as this easily handles highlighting too.
-                can also fire off an event to let another system handle this.
-            */
+            let (_, piece, pos) = piece_query.get(turn_data.move_piece.unwrap()).unwrap();
+            let valid_moves = piece.valid_moves(*pos, &board_query);
+            for (entity, board_pos) in &square_query {
+                if valid_moves.contains(board_pos) {
+                    commands.entity(entity).insert(ValidMove);
+                }
+            }
             turn_data.state = TurnState::SelectTarget;
         }
         TurnState::SelectTarget => {
