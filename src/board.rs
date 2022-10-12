@@ -35,7 +35,7 @@ enum SquareColor {
 }
 
 #[derive(Clone, Component, Copy, Debug)]
-struct Square(SquareColor);
+struct Square;
 
 // (0, 0) is A1, (0, 7) is A8
 #[derive(Clone, Component, Copy, Debug, Eq, PartialEq)]
@@ -79,8 +79,7 @@ fn create_board(
     for row in 0..8 {
         for col in 0..8 {
             let pos = BoardPosition { row, col };
-            let sq = Square(pos.square_color());
-            let material = match sq.0 {
+            let material = match pos.square_color() {
                 SquareColor::White => materials.white_color.clone(), // TODO: do we need to clone here? Creating too many handles?
                 SquareColor::Black => materials.black_color.clone(),
             };
@@ -92,7 +91,7 @@ fn create_board(
                     ..default()
                 })
                 .insert_bundle(PickableBundle::default())
-                .insert(sq)
+                .insert(Square)
                 .insert(pos);
         }
     }
@@ -123,13 +122,13 @@ fn render_board(
         .move_piece
         .and_then(|piece_ent| board_pos_query.get(piece_ent).ok());
 
-    for (entity, square, pos, mut material) in &mut square_query {
+    for (entity, _, pos, mut material) in &mut square_query {
         if Some(pos) == piece_pos {
             *material = materials.selected_color.clone();
         } else if Some(entity) == hovered_square.entity {
             *material = materials.hovered_color.clone();
         } else {
-            match square.0 {
+            match pos.square_color() {
                 SquareColor::White => *material = materials.white_color.clone(), // TODO: don't clone materials?
                 SquareColor::Black => *material = materials.black_color.clone(),
             }
