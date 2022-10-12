@@ -80,13 +80,14 @@ impl FromWorld for PiecesRenderData {
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
-enum PieceColor {
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum PieceColor {
+    #[default]
     White,
     Black,
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum PieceKind {
     King,
     Queen,
@@ -96,9 +97,9 @@ enum PieceKind {
     Pawn,
 }
 
-#[derive(Clone, Component, Copy)]
+#[derive(Clone, Component, Copy, Debug)]
 pub struct Piece {
-    color: PieceColor,
+    pub color: PieceColor,
     kind: PieceKind,
 }
 
@@ -206,6 +207,7 @@ fn animate_pieces(time: Res<Time>, mut query: Query<(&mut Transform, &Piece, &Bo
     }
 }
 
+#[derive(Debug)]
 pub struct PieceMoveEvent {
     entity: Entity,
     target: BoardPosition,

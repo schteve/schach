@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_mod_picking::{HoverEvent, PickableBundle, PickingEvent};
 
-use crate::pieces::{Piece, PieceMoveEvent};
+use crate::pieces::{Piece, PieceColor, PieceMoveEvent};
 
 struct SquaresRenderData {
     hovered_color: Handle<StandardMaterial>,
@@ -28,17 +28,17 @@ impl FromWorld for SquaresRenderData {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum SquareColor {
     White,
     Black,
 }
 
-#[derive(Clone, Component, Copy)]
+#[derive(Clone, Component, Copy, Debug)]
 struct Square(SquareColor);
 
 // (0, 0) is A1, (0, 7) is A8
-#[derive(Clone, Component, Copy, Eq, PartialEq)]
+#[derive(Clone, Component, Copy, Debug, Eq, PartialEq)]
 pub struct BoardPosition {
     pub row: u8,
     pub col: u8,
@@ -109,7 +109,7 @@ fn create_board(
 
 fn render_board(
     hovered_square: Res<HoveredSquare>,
-    selected_piece: Res<SelectedPiece>,
+    turn_data: Res<TurnData>,
     materials: Res<SquaresRenderData>,
     mut square_query: Query<(
         Entity,
@@ -119,12 +119,9 @@ fn render_board(
     )>,
     board_pos_query: Query<&BoardPosition>,
 ) {
-    let piece_pos = if let Some(piece_ent) = selected_piece.entity {
-        let board_pos = board_pos_query.get(piece_ent).unwrap();
-        Some(board_pos)
-    } else {
-        None
-    };
+    let piece_pos = turn_data
+        .move_piece
+        .and_then(|piece_ent| board_pos_query.get(piece_ent).ok());
 
     for (entity, square, pos, mut material) in &mut square_query {
         if Some(pos) == piece_pos {
@@ -140,27 +137,29 @@ fn render_board(
     }
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 struct HoveredSquare {
     entity: Option<Entity>,
 }
 
+#[derive(Debug)]
 struct ClickSquareEvent {
     kind: MouseButton,
-    entity: Option<Entity>,
+    board_pos: Option<BoardPosition>,
 }
 
 fn click_square(
     mut pick_events: EventReader<PickingEvent>,
     mouse_button_inputs: Res<Input<MouseButton>>,
     squares_query: Query<&Square>,
+    board_pos_query: Query<&BoardPosition>,
     mut hovered_square: ResMut<HoveredSquare>,
     mut click_square_events: EventWriter<ClickSquareEvent>,
 ) {
     for event in pick_events.iter() {
         match event {
             PickingEvent::Hover(HoverEvent::JustEntered(e)) => {
-                if squares_query.get(*e).is_ok() {
+                if squares_query.contains(*e) {
                     hovered_square.entity = Some(*e);
                 } else {
                     hovered_square.entity = None;
@@ -177,84 +176,186 @@ fn click_square(
         }
     }
 
-    if mouse_button_inputs.just_pressed(MouseButton::Left) {
-        click_square_events.send(ClickSquareEvent {
-            kind: MouseButton::Left,
-            entity: hovered_square.entity,
-        });
-    }
-    if mouse_button_inputs.just_pressed(MouseButton::Right) {
-        click_square_events.send(ClickSquareEvent {
-            kind: MouseButton::Right,
-            entity: hovered_square.entity,
-        });
-    }
-    if mouse_button_inputs.just_pressed(MouseButton::Middle) {
-        click_square_events.send(ClickSquareEvent {
-            kind: MouseButton::Middle,
-            entity: hovered_square.entity,
-        });
-    }
-}
+    let board_pos = hovered_square
+        .entity
+        .and_then(|sq_ent| board_pos_query.get(sq_ent).ok().copied());
 
-#[derive(Default)]
-struct SelectedSquare {
-    entity: Option<Entity>,
-}
-
-fn select_square(
-    mut events: EventReader<ClickSquareEvent>,
-    mut selected_square: ResMut<SelectedSquare>,
-) {
-    for event in events.iter() {
-        if event.kind == MouseButton::Left {
-            selected_square.entity = event.entity;
+    let button_kinds = [MouseButton::Left, MouseButton::Right, MouseButton::Middle];
+    for kind in button_kinds {
+        if mouse_button_inputs.just_pressed(kind) {
+            click_square_events.send(ClickSquareEvent { kind, board_pos });
         }
     }
 }
 
-#[derive(Default)]
-struct SelectedPiece {
-    entity: Option<Entity>,
+#[derive(Clone, Component, Copy, Debug, Default)]
+struct Turn(PieceColor);
+
+impl Turn {
+    fn advance(&mut self) {
+        self.0 = match self.0 {
+            PieceColor::White => PieceColor::Black,
+            PieceColor::Black => PieceColor::White,
+        }
+    }
 }
 
-fn select_piece(
-    selected_square: Res<SelectedSquare>,
-    board_pos_query: Query<&BoardPosition>,
+#[derive(Clone, Copy, Default)]
+enum TurnState {
+    #[default]
+    SelectPiece,
+    ShowHighlights,
+    SelectTarget,
+    AnimateMove,
+    EndTurn,
+}
+
+#[derive(Clone, Component, Copy, Default)]
+struct TurnData {
+    state: TurnState,
+    move_piece: Option<Entity>,
+    move_target: Option<BoardPosition>,
+}
+
+/*
+                          ┌──────────────────────────────────────────┐
+                          │                                          │
+                 ┌────────▼─────────┐                                │
+                 │                  │                                │
+                 │ Select piece     ◄──────────────────────┐         │
+                 │                  │                      │         │
+                 └────────┬─────────┘                      │         │
+                          │                                │         │
+                          │ Valid (own piece)              │         │
+                          │                                │         │
+                 ┌────────▼─────────┐                      │         │
+                 │ Highlight piece  │                      │         │
+┌────────────────► Generate moves   │                      │         │
+│                │ Highlight moves  │                      │         │
+│                └────────┬─────────┘                      │         │
+│                         │                                │         │
+│                         │                                │         │
+│                         │                                │         │
+│                ┌────────▼─────────┐                      │         │
+│        Invalid │                  │ Invalid              │         │
+└────────────────┤ Select target    ├──────────────────────┘         │
+     (own piece) │                  │ (enemy, empty, off board)      │
+                 └────────┬─────────┘                                │
+                          │                                          │
+                          │ Valid target selected                    │
+                          │                                          │
+                 ┌────────▼─────────┐                                │
+                 │ Clear highlights │                                │
+                 │ Enact move       │                                │
+                 │ Animate move     │                                │
+                 └────────┬─────────┘                                │
+                          │                                          │
+                          │ Anim done                                │
+                          │                                          │
+                 ┌────────▼─────────┐                                │
+                 │ Clear selections │                                │
+                 │ Change player    ├────────────────────────────────┘
+                 │ End turn         │
+                 └──────────────────┘
+ */
+fn turn_manager(
+    mut turn: ResMut<Turn>,
+    mut turn_data: ResMut<TurnData>,
+    mut click_square_events: EventReader<ClickSquareEvent>,
     piece_query: Query<(Entity, &Piece, &BoardPosition)>,
-    mut selected_piece: ResMut<SelectedPiece>,
-    mut events: EventWriter<PieceMoveEvent>,
+    mut piece_move_events: EventWriter<PieceMoveEvent>,
 ) {
-    // Only do this stuff if a new square is selected
-    if !selected_square.is_changed() {
-        return;
-    }
-
-    if let Some(sq_ent) = selected_square.entity {
-        // First find which position was selected
-        let select_pos = *board_pos_query.get(sq_ent).unwrap();
-        if selected_piece.entity.is_none() {
-            // Use the selected piece (if any) only if we didn't already have a piece selected
-            let piece_at_selection = piece_query.iter().find_map(|(entity, _piece, piece_pos)| {
-                if *piece_pos == select_pos {
-                    Some(entity)
-                } else {
-                    None
+    match turn_data.state {
+        TurnState::SelectPiece => {
+            for ev in click_square_events.iter() {
+                if ev.kind == MouseButton::Left {
+                    if let Some(pos) = ev.board_pos {
+                        for (entity, piece, piece_pos) in &piece_query {
+                            if turn.0 == piece.color && pos == *piece_pos {
+                                turn_data.move_piece = Some(entity); // This piece is highlighted in render_board()
+                                turn_data.state = TurnState::ShowHighlights;
+                                break;
+                            }
+                        }
+                    } else {
+                        turn_data.move_piece = None;
+                    }
                 }
-            });
-            selected_piece.entity = piece_at_selection;
-        } else {
-            // If we already had a piece selected then move it to the newly selected position
-            events.send(PieceMoveEvent::new(
-                selected_piece.entity.unwrap(),
-                select_pos,
-            ));
-            selected_piece.entity = None;
+            }
         }
-    } else {
-        // Selected something that's not a square, remove the piece selection
-        selected_piece.entity = None;
+        TurnState::ShowHighlights => {
+            /*
+                TODO: generate valid moves & highlight them
+                Store valid moves as a vec on turndata? or add a marker component for the piece or square?
+                leaning towards component as this easily handles highlighting too.
+                can also fire off an event to let another system handle this.
+            */
+            turn_data.state = TurnState::SelectTarget;
+        }
+        TurnState::SelectTarget => {
+            for ev in click_square_events.iter() {
+                if ev.kind == MouseButton::Left {
+                    if let Some(target_pos) = ev.board_pos {
+                        // Get details of the source piece
+                        let (_, piece, source_pos) =
+                            piece_query.get(turn_data.move_piece.unwrap()).unwrap();
+
+                        // Check if the target selection is a friendly piece
+                        let friendly_target =
+                            piece_query.iter().find_map(|(entity, piece, piece_pos)| {
+                                if target_pos == *piece_pos && turn.0 == piece.color {
+                                    Some(entity)
+                                } else {
+                                    None
+                                }
+                            });
+
+                        if let Some(entity) = friendly_target {
+                            // Invalid selection, but it's our own piece so just go back and use this as the piece to move
+                            turn_data.move_piece = Some(entity); // This piece is highlighted in render_board()
+                            turn_data.state = TurnState::ShowHighlights;
+                        } else if is_target_valid(*piece, *source_pos, target_pos) {
+                            // Valid selection, move this piece
+                            turn_data.move_target = Some(target_pos);
+                            turn_data.state = TurnState::AnimateMove;
+                            piece_move_events.send(PieceMoveEvent::new(
+                                turn_data.move_piece.unwrap(),
+                                turn_data.move_target.unwrap(),
+                            ));
+                        } else {
+                            // Invalid selection (whether enemy piece or empty). Deselect and go back to the beginning.
+                            turn_data.move_piece = None;
+                            turn_data.state = TurnState::SelectPiece;
+                        }
+                    } else {
+                        // Invalid selection (off board). Deselect and go back to the beginning.
+                        turn_data.move_piece = None;
+                        turn_data.state = TurnState::SelectPiece;
+                    }
+                }
+            }
+        }
+        TurnState::AnimateMove => {
+            // TODO: wait for animation to complete
+            turn_data.state = TurnState::EndTurn;
+        }
+        TurnState::EndTurn => {
+            // Clear selections & end turn
+            turn_data.move_piece = None;
+            turn_data.move_target = None;
+            turn_data.state = TurnState::SelectPiece;
+            // Change player
+            turn.advance();
+        }
     }
+}
+
+fn is_target_valid(
+    _move_piece: Piece,
+    _move_source: BoardPosition,
+    _move_target: BoardPosition,
+) -> bool {
+    true
 }
 
 pub struct BoardPlugin;
@@ -267,9 +368,8 @@ impl Plugin for BoardPlugin {
             .add_system(click_square)
             .init_resource::<HoveredSquare>()
             .add_event::<ClickSquareEvent>()
-            .add_system(select_square)
-            .init_resource::<SelectedSquare>()
-            .add_system(select_piece)
-            .init_resource::<SelectedPiece>();
+            .add_system(turn_manager)
+            .init_resource::<Turn>()
+            .init_resource::<TurnData>();
     }
 }
