@@ -106,41 +106,62 @@ pub struct Piece {
 impl Piece {
     pub fn valid_moves(
         &self,
-        pos: BoardPosition,
+        curr_pos: BoardPosition,
         piece_query: &Query<(&Piece, &BoardPosition)>,
     ) -> Vec<BoardPosition> {
         // TODO: handle check, en passant, castling, pawn 2-moves & captures
-        let pos_row = pos.row as i8;
-        let pos_col = pos.col as i8;
         let mut output = Vec::new();
         match self.kind {
             PieceKind::King => {
-                for r in pos_row - 1..=pos_row + 1 {
-                    for c in pos_col - 1..=pos_col + 1 {
-                        if is_invalid(r, c, pos, self.color, piece_query) {
+                for r_off in -1..=1 {
+                    for c_off in -1..=1 {
+                        let new_pos = curr_pos + (r_off, c_off);
+                        if is_invalid(new_pos, curr_pos, self.color, piece_query) {
                             continue;
-                        } else {
-                            output.push(BoardPosition::new(r as u8, c as u8));
                         }
+                        output.push(new_pos);
                     }
                 }
             }
-            PieceKind::Queen => todo!(),
-            PieceKind::Rook => todo!(),
-            PieceKind::Bishop => todo!(),
-            PieceKind::Knight => todo!(),
+            PieceKind::Queen => {
+                for step in [(-1, 0), (1, 0), (0, 1), (0, -1)] {
+                    check_line(curr_pos, step, self.color, piece_query, &mut output);
+                }
+                for step in [(-1, -1), (-1, 1), (1, -1), (1, 1)] {
+                    check_line(curr_pos, step, self.color, piece_query, &mut output);
+                }
+            }
+            PieceKind::Rook => {
+                for step in [(-1, 0), (1, 0), (0, 1), (0, -1)] {
+                    check_line(curr_pos, step, self.color, piece_query, &mut output);
+                }
+            }
+            PieceKind::Bishop => {
+                for step in [(-1, -1), (-1, 1), (1, -1), (1, 1)] {
+                    check_line(curr_pos, step, self.color, piece_query, &mut output);
+                }
+            }
+            PieceKind::Knight => {
+                for step in [(-1, -1), (-1, 1), (1, -1), (1, 1)] {
+                    let diag_pos = curr_pos + step;
+                    let new_pos = diag_pos + (step.0, 0);
+                    if !is_invalid(new_pos, curr_pos, self.color, piece_query) {
+                        output.push(new_pos);
+                    }
+                    let new_pos = diag_pos + (0, step.1);
+                    if !is_invalid(new_pos, curr_pos, self.color, piece_query) {
+                        output.push(new_pos);
+                    }
+                }
+            }
             PieceKind::Pawn => {
                 let next_row = match self.color {
                     PieceColor::White => 1,
                     PieceColor::Black => -1,
                 };
-                let r = pos_row + next_row;
-                for c in pos_col - 1..=pos_col + 1 {
-                    if is_invalid(r, c, pos, self.color, piece_query) {
-                        continue;
-                    } else {
-                        output.push(BoardPosition::new(r as u8, c as u8));
-                    }
+                let new_pos = curr_pos + (next_row, 0);
+                if !is_invalid(new_pos, curr_pos, self.color, piece_query) {
+                    output.push(new_pos);
                 }
             }
         }
@@ -148,36 +169,70 @@ impl Piece {
     }
 }
 
+fn check_line(
+    curr_pos: BoardPosition,
+    step: (i8, i8),
+    color: PieceColor,
+    piece_query: &Query<(&Piece, &BoardPosition)>,
+    output: &mut Vec<BoardPosition>,
+) {
+    let mut offset = step;
+    loop {
+        let new_pos = curr_pos + offset;
+        if is_invalid(new_pos, curr_pos, color, piece_query) {
+            break;
+        }
+        output.push(new_pos);
+        if is_piece_capture(new_pos, color, piece_query) {
+            break;
+        }
+        offset.0 += step.0;
+        offset.1 += step.1;
+    }
+}
+
 fn is_invalid(
-    row: i8,
-    col: i8,
-    pos: BoardPosition,
+    new_pos: BoardPosition,
+    curr_pos: BoardPosition,
     color: PieceColor,
     piece_query: &Query<(&Piece, &BoardPosition)>,
 ) -> bool {
-    is_out_of_bounds(row, col)
-        || is_non_move(row, col, pos)
-        || is_piece_blocking(row, col, color, piece_query)
+    is_out_of_bounds(new_pos)
+        || is_non_move(new_pos, curr_pos)
+        || is_piece_blocking(new_pos, color, piece_query)
 }
 
-fn is_out_of_bounds(row: i8, col: i8) -> bool {
-    !(0..8).contains(&row) || !(0..8).contains(&col)
+fn is_out_of_bounds(new_pos: BoardPosition) -> bool {
+    !(0..8).contains(&new_pos.row) || !(0..8).contains(&new_pos.col)
 }
 
-fn is_non_move(row: i8, col: i8, pos: BoardPosition) -> bool {
-    pos == BoardPosition::new(row as u8, col as u8)
+fn is_non_move(new_pos: BoardPosition, curr_pos: BoardPosition) -> bool {
+    new_pos == curr_pos
 }
 
 fn is_piece_blocking(
-    row: i8,
-    col: i8,
+    new_pos: BoardPosition,
     color: PieceColor,
     query: &Query<(&Piece, &BoardPosition)>,
 ) -> bool {
-    // You only get blocked by your own piece
+    // You only get blocked by your own piece TODO: pawns get blocked by other pieces unless capturing
     for (piece, piece_pos) in query {
         // TODO: this seems like a really slow way to access board state, do something about it?
-        if piece.color == color && *piece_pos == BoardPosition::new(row as u8, col as u8) {
+        if piece.color == color && *piece_pos == new_pos {
+            return true;
+        }
+    }
+    false
+}
+
+fn is_piece_capture(
+    new_pos: BoardPosition,
+    color: PieceColor,
+    query: &Query<(&Piece, &BoardPosition)>,
+) -> bool {
+    for (piece, piece_pos) in query {
+        // TODO: this seems like a really slow way to access board state, do something about it?
+        if piece.color != color && *piece_pos == new_pos {
             return true;
         }
     }

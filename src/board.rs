@@ -1,3 +1,5 @@
+use std::ops::Add;
+
 use bevy::prelude::*;
 use bevy_mod_picking::{HoverEvent, PickableBundle, PickingEvent};
 
@@ -40,15 +42,11 @@ struct Square;
 // (0, 0) is A1, (0, 7) is A8
 #[derive(Clone, Component, Copy, Debug, Eq, PartialEq)]
 pub struct BoardPosition {
-    pub row: u8,
-    pub col: u8,
+    pub row: i8,
+    pub col: i8,
 }
 
 impl BoardPosition {
-    pub fn new(row: u8, col: u8) -> Self {
-        Self { row, col }
-    }
-
     fn square_color(&self) -> SquareColor {
         if (self.row + self.col) % 2 == 0 {
             SquareColor::Black
@@ -62,6 +60,17 @@ impl BoardPosition {
         let y = 0.25;
         let z = -(self.row as f32 - 3.5);
         Vec3::new(x, y, z)
+    }
+}
+
+impl Add<(i8, i8)> for BoardPosition {
+    type Output = Self;
+
+    fn add(self, rhs: (i8, i8)) -> Self::Output {
+        Self {
+            row: self.row + rhs.0,
+            col: self.col + rhs.1,
+        }
     }
 }
 
