@@ -279,6 +279,7 @@ fn turn_manager(
     piece_query: Query<(Entity, &Piece, &BoardPosition)>,
     square_query: Query<(Entity, &BoardPosition), With<Square>>,
     board_query: Query<(&Piece, &BoardPosition)>,
+    valid_moves_query: Query<Entity, With<ValidMove>>,
     mut piece_move_events: EventWriter<PieceMoveEvent>,
 ) {
     match turn_data.state {
@@ -348,6 +349,11 @@ fn turn_manager(
                         // Invalid selection (off board). Deselect and go back to the beginning.
                         turn_data.move_piece = None;
                         turn_data.state = TurnState::SelectPiece;
+                    }
+
+                    // Clear highlighted valid moves
+                    for entity in &valid_moves_query {
+                        commands.entity(entity).remove::<ValidMove>();
                     }
                 }
             }
