@@ -366,10 +366,8 @@ fn turn_manager(
             }
         }
         TurnState::AnimateMove => {
-            // TODO: this doesn't seem like the most robust system, maybe pass the entity that completed its animation to be sure we're getting the appropriate event
             for event in anim_complete_events.iter() {
                 if event.entity == turn_data.move_piece.unwrap() {
-                    println!("Anim Complete");
                     turn_data.state = TurnState::CheckCapture;
                 }
             }
