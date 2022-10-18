@@ -12,7 +12,7 @@ Kinda need these to call it chess.
 - [x] Take turns
 - [x] Move pieces according to game rules
     - [x] Usual piece movement
-    - [ ] Capture pieces
+    - [x] Capture pieces
     - [ ] Pawn 2-move
     - [ ] Castling
     - [ ] En passant
@@ -29,7 +29,7 @@ Kinda need these to call it chess.
 
 We'll see if I get there.
 
-- [ ] Display taken pieces in a side board
+- [ ] Display taken pieces in a side board (also show material point score there)
 - [ ] Pan & rotate board
 - [ ] Undo move
 - [ ] Time control

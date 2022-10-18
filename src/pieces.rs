@@ -331,8 +331,12 @@ fn spawn_piece(
         });
 }
 
-fn animate_pieces(time: Res<Time>, mut query: Query<(&mut Transform, &Piece, &BoardPosition)>) {
-    for (mut transform, _piece, board_pos) in &mut query {
+fn animate_pieces(
+    time: Res<Time>,
+    mut query: Query<(Entity, &mut Transform, &BoardPosition), With<Piece>>,
+    mut anim_complete_events: EventWriter<PieceAnimCompleteEvent>,
+) {
+    for (entity, mut transform, board_pos) in &mut query {
         let direction = board_pos.to_translation() - transform.translation;
         if direction.length() > 0.01 {
             let speed = 5.0;
@@ -341,11 +345,17 @@ fn animate_pieces(time: Res<Time>, mut query: Query<(&mut Transform, &Piece, &Bo
             let step_to_use = if direction.length() > step.length() {
                 step
             } else {
+                anim_complete_events.send(PieceAnimCompleteEvent { entity });
                 direction
             };
             transform.translation += step_to_use;
         }
     }
+}
+
+#[derive(Debug)]
+pub struct PieceAnimCompleteEvent {
+    pub entity: Entity,
 }
 
 #[derive(Debug)]
@@ -381,6 +391,7 @@ impl Plugin for PiecesPlugin {
             .init_resource::<PiecesRenderData>()
             .add_system(animate_pieces)
             .add_system(move_pieces)
-            .add_event::<PieceMoveEvent>();
+            .add_event::<PieceMoveEvent>()
+            .add_event::<PieceAnimCompleteEvent>();
     }
 }

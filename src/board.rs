@@ -3,7 +3,7 @@ use std::ops::Add;
 use bevy::prelude::*;
 use bevy_mod_picking::{HoverEvent, PickableBundle, PickingEvent};
 
-use crate::pieces::{Piece, PieceColor, PieceMoveEvent};
+use crate::pieces::{Piece, PieceAnimCompleteEvent, PieceColor, PieceMoveEvent};
 
 struct SquaresRenderData {
     hovered_color: Handle<StandardMaterial>,
@@ -225,6 +225,7 @@ enum TurnState {
     ShowHighlights,
     SelectTarget,
     AnimateMove,
+    CheckCapture,
     EndTurn,
 }
 
@@ -290,6 +291,7 @@ fn turn_manager(
     board_query: Query<(&Piece, &BoardPosition)>,
     valid_moves_query: Query<(Entity, &BoardPosition), With<ValidMove>>,
     mut piece_move_events: EventWriter<PieceMoveEvent>,
+    mut anim_complete_events: EventReader<PieceAnimCompleteEvent>,
 ) {
     match turn_data.state {
         TurnState::SelectPiece => {
@@ -364,7 +366,20 @@ fn turn_manager(
             }
         }
         TurnState::AnimateMove => {
-            // TODO: wait for animation to complete
+            // TODO: this doesn't seem like the most robust system, maybe pass the entity that completed its animation to be sure we're getting the appropriate event
+            for event in anim_complete_events.iter() {
+                if event.entity == turn_data.move_piece.unwrap() {
+                    println!("Anim Complete");
+                    turn_data.state = TurnState::CheckCapture;
+                }
+            }
+        }
+        TurnState::CheckCapture => {
+            for (entity, piece, pos) in &piece_query {
+                if turn.0 != piece.color && *pos == turn_data.move_target.unwrap() {
+                    commands.entity(entity).despawn_recursive();
+                }
+            }
             turn_data.state = TurnState::EndTurn;
         }
         TurnState::EndTurn => {
