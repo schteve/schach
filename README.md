@@ -8,11 +8,12 @@ Some kind of interative chess application.
 
 Kinda need these to call it chess.
 
-- [ ] Render a chess board
-- [ ] Take turns
-- [ ] Move pieces according to game rules
-    - [ ] Usual piece movement
-    - [ ] Take pieces
+- [x] Render a chess board
+- [x] Take turns
+- [x] Move pieces according to game rules
+    - [x] Usual piece movement
+    - [ ] Capture pieces
+    - [ ] Pawn 2-move
     - [ ] Castling
     - [ ] En passant
     - [ ] Promotion
