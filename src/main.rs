@@ -1,7 +1,8 @@
 mod board;
+mod game;
 mod pieces;
 
-use crate::{board::BoardPlugin, pieces::PiecesPlugin};
+use crate::{board::BoardPlugin, game::GamePlugin, pieces::PiecesPlugin};
 use bevy::prelude::*;
 use bevy_mod_picking::{InteractablePickingPlugin, PickingCameraBundle, PickingPlugin};
 
@@ -19,6 +20,7 @@ fn main() {
         .add_plugin(InteractablePickingPlugin)
         .add_plugin(BoardPlugin)
         .add_plugin(PiecesPlugin)
+        .add_plugin(GamePlugin)
         .add_startup_system(setup)
         .run();
 }
