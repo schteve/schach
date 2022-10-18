@@ -288,7 +288,7 @@ fn turn_manager(
     piece_query: Query<(Entity, &Piece, &BoardPosition)>,
     square_query: Query<(Entity, &BoardPosition), With<Square>>,
     board_query: Query<(&Piece, &BoardPosition)>,
-    valid_moves_query: Query<Entity, With<ValidMove>>,
+    valid_moves_query: Query<(Entity, &BoardPosition), With<ValidMove>>,
     mut piece_move_events: EventWriter<PieceMoveEvent>,
 ) {
     match turn_data.state {
@@ -323,10 +323,6 @@ fn turn_manager(
             for ev in click_square_events.iter() {
                 if ev.kind == MouseButton::Left {
                     if let Some(target_pos) = ev.board_pos {
-                        // Get details of the source piece
-                        let (_, piece, source_pos) =
-                            piece_query.get(turn_data.move_piece.unwrap()).unwrap();
-
                         // Check if the target selection is a friendly piece
                         let friendly_target =
                             piece_query.iter().find_map(|(entity, piece, piece_pos)| {
@@ -341,7 +337,7 @@ fn turn_manager(
                             // Invalid selection, but it's our own piece so just go back and use this as the piece to move
                             turn_data.move_piece = Some(entity); // This piece is highlighted in render_board()
                             turn_data.state = TurnState::ShowHighlights;
-                        } else if is_target_valid(*piece, *source_pos, target_pos) {
+                        } else if valid_moves_query.iter().any(|(_, pos)| *pos == target_pos) {
                             // Valid selection, move this piece
                             turn_data.move_target = Some(target_pos);
                             turn_data.state = TurnState::AnimateMove;
@@ -361,7 +357,7 @@ fn turn_manager(
                     }
 
                     // Clear highlighted valid moves
-                    for entity in &valid_moves_query {
+                    for (entity, _) in &valid_moves_query {
                         commands.entity(entity).remove::<ValidMove>();
                     }
                 }
@@ -380,14 +376,6 @@ fn turn_manager(
             turn.advance();
         }
     }
-}
-
-fn is_target_valid(
-    _move_piece: Piece,
-    _move_source: BoardPosition,
-    _move_target: BoardPosition,
-) -> bool {
-    true
 }
 
 pub struct BoardPlugin;
