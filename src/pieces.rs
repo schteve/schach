@@ -125,20 +125,24 @@ impl Piece {
             }
             PieceKind::Queen => {
                 for step in [(-1, 0), (1, 0), (0, 1), (0, -1)] {
-                    check_line(curr_pos, step, self.color, piece_query, &mut output);
+                    let moves = check_line(curr_pos, step, self.color, piece_query);
+                    output.extend(moves);
                 }
                 for step in [(-1, -1), (-1, 1), (1, -1), (1, 1)] {
-                    check_line(curr_pos, step, self.color, piece_query, &mut output);
+                    let moves = check_line(curr_pos, step, self.color, piece_query);
+                    output.extend(moves);
                 }
             }
             PieceKind::Rook => {
                 for step in [(-1, 0), (1, 0), (0, 1), (0, -1)] {
-                    check_line(curr_pos, step, self.color, piece_query, &mut output);
+                    let moves = check_line(curr_pos, step, self.color, piece_query);
+                    output.extend(moves);
                 }
             }
             PieceKind::Bishop => {
                 for step in [(-1, -1), (-1, 1), (1, -1), (1, 1)] {
-                    check_line(curr_pos, step, self.color, piece_query, &mut output);
+                    let moves = check_line(curr_pos, step, self.color, piece_query);
+                    output.extend(moves);
                 }
             }
             PieceKind::Knight => {
@@ -174,9 +178,9 @@ fn check_line(
     step: (i8, i8),
     color: PieceColor,
     piece_query: &Query<(&Piece, &BoardPosition)>,
-    output: &mut Vec<BoardPosition>,
-) {
+) -> Vec<BoardPosition> {
     let mut offset = step;
+    let mut output = Vec::new();
     loop {
         let new_pos = curr_pos + offset;
         if is_invalid(new_pos, curr_pos, color, piece_query) {
@@ -189,6 +193,7 @@ fn check_line(
         offset.0 += step.0;
         offset.1 += step.1;
     }
+    output
 }
 
 fn is_invalid(
