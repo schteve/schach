@@ -47,6 +47,10 @@ pub struct BoardPosition {
 }
 
 impl BoardPosition {
+    pub fn new() -> Self {
+        Self { row: 0, col: 0 }
+    }
+
     fn square_color(&self) -> SquareColor {
         if (self.row + self.col) % 2 == 0 {
             SquareColor::Black
@@ -60,6 +64,30 @@ impl BoardPosition {
         let y = 0.25;
         let z = -(self.row as f32 - 3.5);
         Vec3::new(x, y, z)
+    }
+
+    pub fn is_in_bounds(self) -> bool {
+        (0..8).contains(&self.row) && (0..8).contains(&self.col)
+    }
+
+    pub fn next(self) -> Option<Self> {
+        let mut next = self;
+        if next.is_in_bounds() {
+            next.col += 1;
+            if next.is_in_bounds() {
+                Some(next)
+            } else {
+                next.row += 1;
+                next.col = 0;
+                if next.is_in_bounds() {
+                    Some(next)
+                } else {
+                    None
+                }
+            }
+        } else {
+            None
+        }
     }
 }
 

@@ -1,3 +1,5 @@
+use std::mem;
+
 use bevy::prelude::*;
 
 use crate::{
@@ -10,7 +12,7 @@ enum MoveCapture {
     Capture,
 }
 
-#[derive(Component, Debug, Default)]
+#[derive(Clone, Component, Debug, Default)]
 pub struct GameState {
     pub board: [[Option<Piece>; 8]; 8], // Set of rows (first row is A1-A8, etc)
     pub curr_player: PieceColor,
@@ -18,30 +20,39 @@ pub struct GameState {
 
 impl GameState {
     fn get_pos(&self, pos: BoardPosition) -> Option<Piece> {
-        if self.is_out_of_bounds(pos) {
-            None
-        } else {
+        if pos.is_in_bounds() {
             self.board[pos.row as usize][pos.col as usize]
+        } else {
+            None
         }
     }
 
     fn set_pos(&mut self, pos: BoardPosition, piece: Option<Piece>) -> Option<Piece> {
-        if self.is_out_of_bounds(pos) {
-            None
+        if pos.is_in_bounds() {
+            mem::replace(&mut self.board[pos.row as usize][pos.col as usize], piece)
         } else {
-            let old = self.board[pos.row as usize][pos.col as usize];
-            self.board[pos.row as usize][pos.col as usize] = piece;
-            old
+            None
+        }
+    }
+
+    fn iter_pieces(&self) -> PieceIter {
+        PieceIter {
+            game_state: self,
+            curr_pos: Some(BoardPosition::new()),
         }
     }
 
     fn apply_movement(&mut self, from_pos: BoardPosition, to_pos: BoardPosition) -> Option<Piece> {
-        if self.is_out_of_bounds(from_pos) {
-            panic!("Moved from out of bounds position: {:?}", from_pos);
-        }
-        if self.is_out_of_bounds(to_pos) {
-            panic!("Moved to out of bounds position: {:?}", to_pos);
-        }
+        assert!(
+            from_pos.is_in_bounds(),
+            "Moved from out of bounds position: {:?}",
+            from_pos
+        );
+        assert!(
+            to_pos.is_in_bounds(),
+            "Moved to out of bounds position: {:?}",
+            to_pos
+        );
 
         let moving_piece = self.get_pos(from_pos);
         assert!(moving_piece.is_some(), "Moving a non-existent piece");
@@ -56,7 +67,31 @@ impl GameState {
         piece: Piece,
         piece_pos: BoardPosition,
     ) -> (Vec<BoardPosition>, Vec<BoardPosition>) {
-        // TODO: handle check, en passant, castling, pawn 2-moves & captures
+        let (mut moves, mut captures) = self.pseudo_moves_and_captures(piece, piece_pos);
+
+        moves.retain(|pos| {
+            let mut new_state = self.clone();
+            new_state.apply_movement(piece_pos, *pos);
+            new_state.advance_turn();
+            !new_state.is_in_check(self.curr_player)
+        });
+
+        captures.retain(|pos| {
+            let mut new_state = self.clone();
+            new_state.apply_movement(piece_pos, *pos);
+            new_state.advance_turn();
+            !new_state.is_in_check(self.curr_player)
+        });
+
+        (moves, captures)
+    }
+
+    fn pseudo_moves_and_captures(
+        &self,
+        piece: Piece,
+        piece_pos: BoardPosition,
+    ) -> (Vec<BoardPosition>, Vec<BoardPosition>) {
+        // TODO: handle check, en passant, castling, pawn 2-moves
         let mut moves = Vec::new();
         let mut captures = Vec::new();
 
@@ -114,14 +149,14 @@ impl GameState {
 
                 // 1-move
                 let new_pos = piece_pos + (next_row, 0);
-                if !self.is_out_of_bounds(new_pos) && self.get_pos(new_pos).is_none() {
+                if new_pos.is_in_bounds() && self.get_pos(new_pos).is_none() {
                     moves.push(new_pos);
                 }
 
                 // Captures
                 for col in [-1, 1] {
                     let new_pos = piece_pos + (next_row, col);
-                    if !self.is_out_of_bounds(new_pos) {
+                    if new_pos.is_in_bounds() {
                         if let Some(Piece { color, .. }) = self.get_pos(new_pos) {
                             if color != self.curr_player {
                                 captures.push(new_pos);
@@ -131,11 +166,12 @@ impl GameState {
                 }
             }
         }
+
         (moves, captures)
     }
 
     fn is_move_or_capture(&self, pos: BoardPosition) -> Option<MoveCapture> {
-        if self.is_out_of_bounds(pos) {
+        if !pos.is_in_bounds() {
             None
         } else if let Some(Piece { color, .. }) = self.get_pos(pos) {
             if color == self.curr_player {
@@ -184,8 +220,28 @@ impl GameState {
         (moves, captures)
     }
 
-    fn is_out_of_bounds(&self, new_pos: BoardPosition) -> bool {
-        !(0..8).contains(&new_pos.row) || !(0..8).contains(&new_pos.col)
+    fn get_king_pos(&self, player: PieceColor) -> BoardPosition {
+        let king = Piece {
+            kind: PieceKind::King,
+            color: player,
+        };
+        self.iter_pieces()
+            .find_map(|(piece, pos)| if piece == king { Some(pos) } else { None })
+            .expect("Couldn't find king for {player:?} player")
+    }
+
+    fn is_in_check(&self, player: PieceColor) -> bool {
+        let king_pos = self.get_king_pos(player);
+        for (piece, pos) in self.iter_pieces() {
+            if piece.color == self.curr_player {
+                let (_, captures) = self.pseudo_moves_and_captures(piece, pos);
+                if captures.contains(&king_pos) {
+                    return true;
+                }
+            }
+        }
+
+        false
     }
 
     fn advance_turn(&mut self) {
@@ -202,6 +258,24 @@ fn update_game_state(
 ) {
     for event in piece_move_events.iter() {
         game_state.apply_movement(event.source, event.target);
+    }
+}
+
+struct PieceIter<'a> {
+    game_state: &'a GameState,
+    curr_pos: Option<BoardPosition>,
+}
+
+impl<'a> Iterator for PieceIter<'a> {
+    type Item = (Piece, BoardPosition);
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let curr_pos = self.curr_pos?;
+            self.curr_pos = curr_pos.next();
+            if let Some(piece) = self.game_state.get_pos(curr_pos) {
+                return Some((piece, curr_pos));
+            }
+        }
     }
 }
 
