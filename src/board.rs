@@ -1,4 +1,4 @@
-use std::ops::Add;
+use std::ops::{Add, AddAssign};
 
 use bevy::prelude::*;
 use bevy_mod_picking::{HoverEvent, PickableBundle, PickingEvent};
@@ -71,6 +71,12 @@ impl Add<(i8, i8)> for BoardPosition {
             row: self.row + rhs.0,
             col: self.col + rhs.1,
         }
+    }
+}
+
+impl AddAssign<(i8, i8)> for BoardPosition {
+    fn add_assign(&mut self, other: (i8, i8)) {
+        *self = *self + other;
     }
 }
 

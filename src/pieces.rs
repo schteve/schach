@@ -88,7 +88,7 @@ pub enum PieceColor {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum PieceKind {
+pub enum PieceKind {
     King,
     Queen,
     Rook,
@@ -100,148 +100,7 @@ enum PieceKind {
 #[derive(Clone, Component, Copy, Debug)]
 pub struct Piece {
     pub color: PieceColor,
-    kind: PieceKind,
-}
-
-impl Piece {
-    pub fn valid_moves(
-        &self,
-        curr_pos: BoardPosition,
-        piece_query: &Query<(&Piece, &BoardPosition)>,
-    ) -> Vec<BoardPosition> {
-        // TODO: handle check, en passant, castling, pawn 2-moves & captures
-        let mut output = Vec::new();
-        match self.kind {
-            PieceKind::King => {
-                for r_off in -1..=1 {
-                    for c_off in -1..=1 {
-                        let new_pos = curr_pos + (r_off, c_off);
-                        if is_invalid(new_pos, curr_pos, self.color, piece_query) {
-                            continue;
-                        }
-                        output.push(new_pos);
-                    }
-                }
-            }
-            PieceKind::Queen => {
-                for step in [(-1, 0), (1, 0), (0, 1), (0, -1)] {
-                    let moves = check_line(curr_pos, step, self.color, piece_query);
-                    output.extend(moves);
-                }
-                for step in [(-1, -1), (-1, 1), (1, -1), (1, 1)] {
-                    let moves = check_line(curr_pos, step, self.color, piece_query);
-                    output.extend(moves);
-                }
-            }
-            PieceKind::Rook => {
-                for step in [(-1, 0), (1, 0), (0, 1), (0, -1)] {
-                    let moves = check_line(curr_pos, step, self.color, piece_query);
-                    output.extend(moves);
-                }
-            }
-            PieceKind::Bishop => {
-                for step in [(-1, -1), (-1, 1), (1, -1), (1, 1)] {
-                    let moves = check_line(curr_pos, step, self.color, piece_query);
-                    output.extend(moves);
-                }
-            }
-            PieceKind::Knight => {
-                for step in [(-1, -1), (-1, 1), (1, -1), (1, 1)] {
-                    let diag_pos = curr_pos + step;
-                    let new_pos = diag_pos + (step.0, 0);
-                    if !is_invalid(new_pos, curr_pos, self.color, piece_query) {
-                        output.push(new_pos);
-                    }
-                    let new_pos = diag_pos + (0, step.1);
-                    if !is_invalid(new_pos, curr_pos, self.color, piece_query) {
-                        output.push(new_pos);
-                    }
-                }
-            }
-            PieceKind::Pawn => {
-                let next_row = match self.color {
-                    PieceColor::White => 1,
-                    PieceColor::Black => -1,
-                };
-                let new_pos = curr_pos + (next_row, 0);
-                if !is_invalid(new_pos, curr_pos, self.color, piece_query) {
-                    output.push(new_pos);
-                }
-            }
-        }
-        output
-    }
-}
-
-fn check_line(
-    curr_pos: BoardPosition,
-    step: (i8, i8),
-    color: PieceColor,
-    piece_query: &Query<(&Piece, &BoardPosition)>,
-) -> Vec<BoardPosition> {
-    let mut offset = step;
-    let mut output = Vec::new();
-    loop {
-        let new_pos = curr_pos + offset;
-        if is_invalid(new_pos, curr_pos, color, piece_query) {
-            break;
-        }
-        output.push(new_pos);
-        if is_piece_capture(new_pos, color, piece_query) {
-            break;
-        }
-        offset.0 += step.0;
-        offset.1 += step.1;
-    }
-    output
-}
-
-fn is_invalid(
-    new_pos: BoardPosition,
-    curr_pos: BoardPosition,
-    color: PieceColor,
-    piece_query: &Query<(&Piece, &BoardPosition)>,
-) -> bool {
-    is_out_of_bounds(new_pos)
-        || is_non_move(new_pos, curr_pos)
-        || is_piece_blocking(new_pos, color, piece_query)
-}
-
-fn is_out_of_bounds(new_pos: BoardPosition) -> bool {
-    !(0..8).contains(&new_pos.row) || !(0..8).contains(&new_pos.col)
-}
-
-fn is_non_move(new_pos: BoardPosition, curr_pos: BoardPosition) -> bool {
-    new_pos == curr_pos
-}
-
-fn is_piece_blocking(
-    new_pos: BoardPosition,
-    color: PieceColor,
-    query: &Query<(&Piece, &BoardPosition)>,
-) -> bool {
-    // You only get blocked by your own piece TODO: pawns get blocked by other pieces unless capturing
-    for (piece, piece_pos) in query {
-        // TODO: this seems like a really slow way to access board state, do something about it?
-        if piece.color == color && *piece_pos == new_pos {
-            return true;
-        }
-    }
-    false
-}
-
-fn is_piece_capture(
-    new_pos: BoardPosition,
-    color: PieceColor,
-    query: &Query<(&Piece, &BoardPosition)>,
-) -> bool {
-    for (piece, piece_pos) in query {
-        // TODO: this seems like a really slow way to access board state, do something about it?
-        if piece.color != color && *piece_pos == new_pos {
-            return true;
-        }
-    }
-    false
+    pub kind: PieceKind,
 }
 
 struct PieceConstData {
@@ -360,13 +219,18 @@ pub struct PieceAnimCompleteEvent {
 
 #[derive(Debug)]
 pub struct PieceMoveEvent {
-    entity: Entity,
-    target: BoardPosition,
+    pub entity: Entity,
+    pub source: BoardPosition,
+    pub target: BoardPosition,
 }
 
 impl PieceMoveEvent {
-    pub fn new(entity: Entity, target: BoardPosition) -> Self {
-        Self { entity, target }
+    pub fn new(entity: Entity, source: BoardPosition, target: BoardPosition) -> Self {
+        Self {
+            entity,
+            source,
+            target,
+        }
     }
 }
 
