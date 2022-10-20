@@ -3,12 +3,16 @@ use std::ops::{Add, AddAssign};
 use bevy::prelude::*;
 use bevy_mod_picking::{HoverEvent, PickableBundle, PickingEvent};
 
-use crate::game::{TurnData, ValidMove};
+use crate::{
+    game::{TurnData, ValidMove},
+    pieces::PieceMoveEvent,
+};
 
 struct SquaresRenderData {
     hovered_color: Handle<StandardMaterial>,
     selected_color: Handle<StandardMaterial>,
     valid_move_color: Handle<StandardMaterial>,
+    shadow_color: Handle<StandardMaterial>,
     black_color: Handle<StandardMaterial>,
     white_color: Handle<StandardMaterial>,
     background_color: Handle<StandardMaterial>,
@@ -23,6 +27,7 @@ impl FromWorld for SquaresRenderData {
             hovered_color: materials.add(Color::rgb(0.6, 0.3, 0.3).into()),
             selected_color: materials.add(Color::rgb(0.9, 0.1, 0.1).into()),
             valid_move_color: materials.add(Color::rgb(0.3, 0.8, 0.3).into()),
+            shadow_color: materials.add(Color::rgb(0.6, 0.6, 0.2).into()),
             black_color: materials.add(Color::rgb(0.1, 0.1, 0.1).into()),
             white_color: materials.add(Color::rgb(0.9, 0.9, 0.9).into()),
             background_color: materials.add(Color::rgb(0.5, 0.5, 0.5).into()),
@@ -168,6 +173,7 @@ fn render_board(
         With<Square>,
     >,
     board_pos_query: Query<&BoardPosition>,
+    shadow_squares: Res<ShadowSquares>,
 ) {
     let piece_pos = turn_data
         .move_piece
@@ -180,6 +186,8 @@ fn render_board(
             *material = materials.hovered_color.clone();
         } else if valid_move.is_some() {
             *material = materials.valid_move_color.clone();
+        } else if shadow_squares.0.contains(pos) {
+            *material = materials.shadow_color.clone();
         } else {
             match pos.square_color() {
                 SquareColor::White => *material = materials.white_color.clone(), // TODO: don't clone materials?
@@ -240,6 +248,20 @@ fn click_square(
     }
 }
 
+#[derive(Component, Default)]
+struct ShadowSquares(Vec<BoardPosition>);
+
+fn leave_shadow(
+    mut events: EventReader<PieceMoveEvent>,
+    mut shadow_squares: ResMut<ShadowSquares>,
+) {
+    for event in events.iter() {
+        shadow_squares.0.clear();
+        shadow_squares.0.push(event.source);
+        shadow_squares.0.push(event.target);
+    }
+}
+
 pub struct BoardPlugin;
 
 impl Plugin for BoardPlugin {
@@ -249,6 +271,8 @@ impl Plugin for BoardPlugin {
             .init_resource::<SquaresRenderData>()
             .add_system(click_square)
             .init_resource::<HoveredSquare>()
-            .add_event::<ClickSquareEvent>();
+            .add_event::<ClickSquareEvent>()
+            .add_system(leave_shadow)
+            .init_resource::<ShadowSquares>();
     }
 }
