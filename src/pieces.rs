@@ -1,3 +1,5 @@
+use std::fmt;
+
 use bevy::prelude::*;
 
 use crate::board::BoardPosition;
@@ -85,6 +87,28 @@ pub enum PieceColor {
     #[default]
     White,
     Black,
+}
+
+impl PieceColor {
+    pub fn next(self) -> Self {
+        match self {
+            Self::White => Self::Black,
+            Self::Black => Self::White,
+        }
+    }
+}
+
+impl fmt::Display for PieceColor {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::White => "White",
+                Self::Black => "Black",
+            }
+        )
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -197,7 +221,7 @@ fn animate_pieces(
 ) {
     for (entity, mut transform, board_pos) in &mut query {
         let direction = board_pos.to_translation() - transform.translation;
-        if direction.length() > 0.01 {
+        if direction.length() != 0.0 {
             let speed = 5.0;
             let step = direction.normalize() * time.delta_seconds() * speed;
             // If it's only a small step then move the whole distance and no further

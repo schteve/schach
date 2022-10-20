@@ -12,10 +12,17 @@ enum MoveCapture {
     Capture,
 }
 
+#[derive(Clone, Copy, Component, Debug)]
+pub enum GameOver {
+    Checkmate(PieceColor), // Winner
+    Stalemate,
+}
+
 #[derive(Clone, Component, Debug, Default)]
 pub struct GameState {
     pub board: [[Option<Piece>; 8]; 8], // Set of rows (first row is A1-A8, etc)
     pub curr_player: PieceColor,
+    pub game_over: Option<GameOver>,
 }
 
 impl GameState {
@@ -73,14 +80,14 @@ impl GameState {
             let mut new_state = self.clone();
             new_state.apply_movement(piece_pos, *pos);
             new_state.advance_turn();
-            !new_state.is_in_check(self.curr_player)
+            !new_state.is_in_check(piece.color)
         });
 
         captures.retain(|pos| {
             let mut new_state = self.clone();
             new_state.apply_movement(piece_pos, *pos);
             new_state.advance_turn();
-            !new_state.is_in_check(self.curr_player)
+            !new_state.is_in_check(piece.color)
         });
 
         (moves, captures)
@@ -101,14 +108,14 @@ impl GameState {
                 let offsets = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)];
                 for offset in offsets {
                     let new_pos = piece_pos + offset;
-                    self.save_moves_captures(new_pos, &mut moves, &mut captures);
+                    self.save_moves_captures(piece, new_pos, &mut moves, &mut captures);
                 }
             }
             PieceKind::Queen => {
                 #[rustfmt::skip]
                 let directions = [(-1, 0), (1, 0), (0, 1), (0, -1), (-1, -1), (-1, 1), (1, -1), (1, 1)];
                 for dir in directions {
-                    let (m, c) = self.check_line(piece_pos, dir);
+                    let (m, c) = self.check_line(piece, piece_pos, dir);
                     moves.extend(m);
                     captures.extend(c);
                 }
@@ -116,7 +123,7 @@ impl GameState {
             PieceKind::Rook => {
                 let directions = [(-1, 0), (1, 0), (0, 1), (0, -1)];
                 for dir in directions {
-                    let (m, c) = self.check_line(piece_pos, dir);
+                    let (m, c) = self.check_line(piece, piece_pos, dir);
                     moves.extend(m);
                     captures.extend(c);
                 }
@@ -124,7 +131,7 @@ impl GameState {
             PieceKind::Bishop => {
                 let directions = [(-1, -1), (-1, 1), (1, -1), (1, 1)];
                 for dir in directions {
-                    let (m, c) = self.check_line(piece_pos, dir);
+                    let (m, c) = self.check_line(piece, piece_pos, dir);
                     moves.extend(m);
                     captures.extend(c);
                 }
@@ -135,14 +142,14 @@ impl GameState {
                     let diag_pos = piece_pos + diag;
 
                     let new_pos = diag_pos + (diag.0, 0);
-                    self.save_moves_captures(new_pos, &mut moves, &mut captures);
+                    self.save_moves_captures(piece, new_pos, &mut moves, &mut captures);
 
                     let new_pos = diag_pos + (0, diag.1);
-                    self.save_moves_captures(new_pos, &mut moves, &mut captures);
+                    self.save_moves_captures(piece, new_pos, &mut moves, &mut captures);
                 }
             }
             PieceKind::Pawn => {
-                let next_row = match self.curr_player {
+                let next_row = match piece.color {
                     PieceColor::White => 1,
                     PieceColor::Black => -1,
                 };
@@ -158,7 +165,7 @@ impl GameState {
                     let new_pos = piece_pos + (next_row, col);
                     if new_pos.is_in_bounds() {
                         if let Some(Piece { color, .. }) = self.get_pos(new_pos) {
-                            if color != self.curr_player {
+                            if color != piece.color {
                                 captures.push(new_pos);
                             }
                         }
@@ -170,11 +177,11 @@ impl GameState {
         (moves, captures)
     }
 
-    fn is_move_or_capture(&self, pos: BoardPosition) -> Option<MoveCapture> {
+    fn is_move_or_capture(&self, piece: Piece, pos: BoardPosition) -> Option<MoveCapture> {
         if !pos.is_in_bounds() {
             None
         } else if let Some(Piece { color, .. }) = self.get_pos(pos) {
-            if color == self.curr_player {
+            if color == piece.color {
                 None // Blocking
             } else {
                 Some(MoveCapture::Capture)
@@ -186,11 +193,12 @@ impl GameState {
 
     fn save_moves_captures(
         &self,
+        piece: Piece,
         pos: BoardPosition,
         moves: &mut Vec<BoardPosition>,
         captures: &mut Vec<BoardPosition>,
     ) {
-        match self.is_move_or_capture(pos) {
+        match self.is_move_or_capture(piece, pos) {
             Some(MoveCapture::Move) => moves.push(pos),
             Some(MoveCapture::Capture) => captures.push(pos),
             _ => (),
@@ -199,6 +207,7 @@ impl GameState {
 
     fn check_line(
         &self,
+        piece: Piece,
         from_pos: BoardPosition,
         direction: (i8, i8),
     ) -> (Vec<BoardPosition>, Vec<BoardPosition>) {
@@ -208,7 +217,7 @@ impl GameState {
         let mut new_pos = from_pos;
         loop {
             new_pos += direction;
-            match self.is_move_or_capture(new_pos) {
+            match self.is_move_or_capture(piece, new_pos) {
                 Some(MoveCapture::Move) => moves.push(new_pos),
                 Some(MoveCapture::Capture) => {
                     captures.push(new_pos);
@@ -232,16 +241,21 @@ impl GameState {
 
     fn is_in_check(&self, player: PieceColor) -> bool {
         let king_pos = self.get_king_pos(player);
-        for (piece, pos) in self.iter_pieces() {
-            if piece.color == self.curr_player {
+        self.iter_pieces()
+            .filter(|(piece, _)| piece.color != player)
+            .any(|(piece, pos)| {
                 let (_, captures) = self.pseudo_moves_and_captures(piece, pos);
-                if captures.contains(&king_pos) {
-                    return true;
-                }
-            }
-        }
+                captures.contains(&king_pos)
+            })
+    }
 
-        false
+    fn no_legal_moves(&self) -> bool {
+        self.iter_pieces()
+            .filter(|(piece, _)| piece.color == self.curr_player)
+            .all(|(piece, piece_pos)| {
+                let (m, c) = self.moves_and_captures(piece, piece_pos);
+                m.is_empty() && c.is_empty()
+            })
     }
 
     fn advance_turn(&mut self) {
@@ -316,6 +330,7 @@ fn setup(mut game_state: ResMut<GameState>) {
 #[derive(Clone, Copy, Default)]
 enum TurnState {
     #[default]
+    CheckForGameOver,
     SelectPiece,
     ShowHighlights,
     SelectTarget,
@@ -329,6 +344,14 @@ pub struct TurnData {
     state: TurnState,
     pub move_piece: Option<Entity>,
     pub move_target: Option<BoardPosition>,
+}
+
+impl TurnData {
+    fn reset(&mut self) {
+        self.state = TurnState::CheckForGameOver;
+        self.move_piece = None;
+        self.move_target = None;
+    }
 }
 
 #[derive(Component)]
@@ -387,7 +410,22 @@ fn turn_manager(
     mut piece_move_events: EventWriter<PieceMoveEvent>,
     mut anim_complete_events: EventReader<PieceAnimCompleteEvent>,
 ) {
+    if game_state.game_over.is_some() {
+        return;
+    }
+
     match turn_data.state {
+        TurnState::CheckForGameOver => {
+            if game_state.no_legal_moves() {
+                if game_state.is_in_check(game_state.curr_player) {
+                    game_state.game_over = Some(GameOver::Checkmate(game_state.curr_player.next()))
+                } else {
+                    game_state.game_over = Some(GameOver::Stalemate)
+                }
+            } else {
+                turn_data.state = TurnState::SelectPiece;
+            }
+        }
         TurnState::SelectPiece => {
             for ev in click_square_events.iter() {
                 if ev.kind == MouseButton::Left {
@@ -480,12 +518,8 @@ fn turn_manager(
             turn_data.state = TurnState::EndTurn;
         }
         TurnState::EndTurn => {
-            // Clear selections & end turn
-            turn_data.move_piece = None;
-            turn_data.move_target = None;
-            turn_data.state = TurnState::SelectPiece;
-            // Change player
-            game_state.advance_turn();
+            turn_data.reset(); // Clear selections & end turn
+            game_state.advance_turn(); // Change player
         }
     }
 }

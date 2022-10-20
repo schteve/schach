@@ -17,10 +17,10 @@ Kinda need these to call it chess.
     - [ ] Castling
     - [ ] En passant
     - [ ] Promotion
-- [ ] Check
+- [x] Check
 - [ ] Game over
-    - [ ] Checkmate
-    - [ ] Stalemate - no moves
+    - [x] Checkmate
+    - [x] Stalemate - no moves
     - [ ] Stalemate - insufficient material
     - [ ] Stalemate - repetition
     - [ ] Resignation / draw by agreement
