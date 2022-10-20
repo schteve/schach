@@ -13,7 +13,7 @@ Kinda need these to call it chess.
 - [x] Move pieces according to game rules
     - [x] Usual piece movement
     - [x] Capture pieces
-    - [ ] Pawn 2-move
+    - [x] Pawn 2-move
     - [ ] Castling
     - [ ] En passant
     - [ ] Promotion

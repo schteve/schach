@@ -27,6 +27,7 @@ pub struct GameState {
 
 impl GameState {
     fn get_pos(&self, pos: BoardPosition) -> Option<Piece> {
+        // TODO: should this return Result<Option<Piece>, ()> to indicate if something is out of bounds vs just empty?
         if pos.is_in_bounds() {
             self.board[pos.row as usize][pos.col as usize]
         } else {
@@ -61,8 +62,17 @@ impl GameState {
             to_pos
         );
 
-        let moving_piece = self.get_pos(from_pos);
+        let mut moving_piece = self.get_pos(from_pos);
         assert!(moving_piece.is_some(), "Moving a non-existent piece");
+
+        // Update moving piece to indicate that it has moved
+        let p = moving_piece.as_mut().unwrap();
+        p.kind = match p.kind {
+            PieceKind::Pawn(false) => PieceKind::Pawn(true),
+            x => x,
+        };
+
+        // Update board
         let taken_piece = self.get_pos(to_pos);
         self.set_pos(from_pos, None);
         self.set_pos(to_pos, moving_piece);
@@ -148,7 +158,7 @@ impl GameState {
                     self.save_moves_captures(piece, new_pos, &mut moves, &mut captures);
                 }
             }
-            PieceKind::Pawn => {
+            PieceKind::Pawn(has_moved) => {
                 let next_row = match piece.color {
                     PieceColor::White => 1,
                     PieceColor::Black => -1,
@@ -158,6 +168,14 @@ impl GameState {
                 let new_pos = piece_pos + (next_row, 0);
                 if new_pos.is_in_bounds() && self.get_pos(new_pos).is_none() {
                     moves.push(new_pos);
+                }
+
+                // 2-move
+                if !has_moved {
+                    let new_pos = piece_pos + (next_row * 2, 0);
+                    if new_pos.is_in_bounds() && self.get_pos(new_pos).is_none() {
+                        moves.push(new_pos);
+                    }
                 }
 
                 // Captures
@@ -266,15 +284,6 @@ impl GameState {
     }
 }
 
-fn update_game_state(
-    mut piece_move_events: EventReader<PieceMoveEvent>,
-    mut game_state: ResMut<GameState>,
-) {
-    for event in piece_move_events.iter() {
-        game_state.apply_movement(event.source, event.target);
-    }
-}
-
 struct PieceIter<'a> {
     game_state: &'a GameState,
     curr_pos: Option<BoardPosition>,
@@ -305,12 +314,12 @@ const STARTING_BOARD: [[Option<Piece>; 8]; 8] = [
         Some(Piece { color: PieceColor::White, kind: PieceKind::Knight, }),
         Some(Piece { color: PieceColor::White, kind: PieceKind::Rook,   }),
     ],
-    [Some(Piece { color: PieceColor::White, kind: PieceKind::Pawn,   }); 8],
+    [Some(Piece { color: PieceColor::White, kind: PieceKind::Pawn(false) }); 8],
     [None; 8],
     [None; 8],
     [None; 8],
     [None; 8],
-    [Some(Piece { color: PieceColor::Black, kind: PieceKind::Pawn,   }); 8],
+    [Some(Piece { color: PieceColor::Black, kind: PieceKind::Pawn(false) }); 8],
     [
         Some(Piece { color: PieceColor::Black, kind: PieceKind::Rook,   }),
         Some(Piece { color: PieceColor::Black, kind: PieceKind::Knight, }),
@@ -356,6 +365,9 @@ impl TurnData {
 
 #[derive(Component)]
 pub struct ValidMove;
+
+#[derive(Component)]
+struct Captured;
 
 /*
                           ┌──────────────────────────────────────────┐
@@ -404,7 +416,8 @@ fn turn_manager(
     mut game_state: ResMut<GameState>,
     mut turn_data: ResMut<TurnData>,
     mut click_square_events: EventReader<ClickSquareEvent>,
-    piece_query: Query<(Entity, &Piece, &BoardPosition)>,
+    piece_query: Query<(Entity, &BoardPosition), With<Piece>>,
+    captured_query: Query<Entity, With<Captured>>,
     square_query: Query<(Entity, &BoardPosition), With<Square>>,
     valid_moves_query: Query<(Entity, &BoardPosition), With<ValidMove>>,
     mut piece_move_events: EventWriter<PieceMoveEvent>,
@@ -430,7 +443,10 @@ fn turn_manager(
             for ev in click_square_events.iter() {
                 if ev.kind == MouseButton::Left {
                     if let Some(pos) = ev.board_pos {
-                        for (entity, piece, piece_pos) in &piece_query {
+                        for (entity, piece_pos) in &piece_query {
+                            let piece = game_state
+                                .get_pos(*piece_pos)
+                                .expect("Entity for piece exists but it's not on the board");
                             if game_state.curr_player == piece.color && pos == *piece_pos {
                                 turn_data.move_piece = Some(entity); // This piece is highlighted in render_board()
                                 turn_data.state = TurnState::ShowHighlights;
@@ -444,8 +460,11 @@ fn turn_manager(
             }
         }
         TurnState::ShowHighlights => {
-            let (_, piece, pos) = piece_query.get(turn_data.move_piece.unwrap()).unwrap();
-            let (moves, captures) = game_state.moves_and_captures(*piece, *pos);
+            let (_, piece_pos) = piece_query.get(turn_data.move_piece.unwrap()).unwrap();
+            let piece = game_state
+                .get_pos(*piece_pos)
+                .expect("Entity for piece exists but it's not on the board");
+            let (moves, captures) = game_state.moves_and_captures(piece, *piece_pos);
             for (entity, board_pos) in &square_query {
                 if moves.contains(board_pos) || captures.contains(board_pos) {
                     commands.entity(entity).insert(ValidMove);
@@ -458,15 +477,16 @@ fn turn_manager(
                 if ev.kind == MouseButton::Left {
                     if let Some(target_pos) = ev.board_pos {
                         // Check if the target selection is a friendly piece
-                        let friendly_target =
-                            piece_query.iter().find_map(|(entity, piece, piece_pos)| {
-                                if target_pos == *piece_pos && game_state.curr_player == piece.color
-                                {
-                                    Some(entity)
-                                } else {
-                                    None
-                                }
-                            });
+                        let friendly_target = piece_query.iter().find_map(|(entity, piece_pos)| {
+                            let piece = game_state
+                                .get_pos(*piece_pos)
+                                .expect("Entity for piece exists but it's not on the board");
+                            if target_pos == *piece_pos && game_state.curr_player == piece.color {
+                                Some(entity)
+                            } else {
+                                None
+                            }
+                        });
 
                         if let Some(entity) = friendly_target {
                             // Invalid selection, but it's our own piece so just go back and use this as the piece to move
@@ -477,8 +497,25 @@ fn turn_manager(
                             turn_data.move_target = Some(target_pos);
                             turn_data.state = TurnState::AnimateMove;
 
-                            let (_, _, source) =
-                                piece_query.get(turn_data.move_piece.unwrap()).unwrap();
+                            // Unwrap some values - these *should* all be guaranteed to be Some at this point
+                            let piece_ent = turn_data.move_piece.unwrap();
+                            let source = piece_query
+                                .get_component::<BoardPosition>(piece_ent)
+                                .unwrap();
+                            let target = turn_data.move_target.unwrap();
+
+                            // Move the piece in the game state
+                            let captured_piece = game_state.apply_movement(*source, target);
+                            if captured_piece.is_some() {
+                                // If there's a piece already in the target square, capture it
+                                for (entity, piece_pos) in &piece_query {
+                                    if *piece_pos == target {
+                                        commands.entity(entity).insert(Captured);
+                                    }
+                                }
+                            }
+
+                            // Signal to the ECS that the piece has moved, so it can be updated & animated there
                             piece_move_events.send(PieceMoveEvent::new(
                                 turn_data.move_piece.unwrap(),
                                 *source,
@@ -510,10 +547,8 @@ fn turn_manager(
             }
         }
         TurnState::CheckCapture => {
-            for (entity, piece, pos) in &piece_query {
-                if game_state.curr_player != piece.color && *pos == turn_data.move_target.unwrap() {
-                    commands.entity(entity).despawn_recursive();
-                }
+            for entity in &captured_query {
+                commands.entity(entity).despawn_recursive();
             }
             turn_data.state = TurnState::EndTurn;
         }
@@ -530,7 +565,6 @@ impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system(setup)
             .add_system(turn_manager)
-            .add_system(update_game_state)
             .init_resource::<GameState>()
             .init_resource::<TurnData>();
     }

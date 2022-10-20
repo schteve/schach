@@ -118,7 +118,7 @@ pub enum PieceKind {
     Rook,
     Bishop,
     Knight,
-    Pawn,
+    Pawn(bool),
 }
 
 #[derive(Clone, Component, Copy, Debug, Eq, PartialEq)]
@@ -134,38 +134,38 @@ struct PieceConstData {
 
 #[rustfmt::skip]
 const STARTING_BOARD: [PieceConstData; 32] = [
-    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Rook,   }, pos: BoardPosition { row: 0, col: 0 } },
-    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Knight, }, pos: BoardPosition { row: 0, col: 1 } },
-    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Bishop, }, pos: BoardPosition { row: 0, col: 2 } },
-    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Queen,  }, pos: BoardPosition { row: 0, col: 3 } },
-    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::King,   }, pos: BoardPosition { row: 0, col: 4 } },
-    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Bishop, }, pos: BoardPosition { row: 0, col: 5 } },
-    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Knight, }, pos: BoardPosition { row: 0, col: 6 } },
-    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Rook,   }, pos: BoardPosition { row: 0, col: 7 } },
-    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 1, col: 0 } },
-    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 1, col: 1 } },
-    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 1, col: 2 } },
-    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 1, col: 3 } },
-    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 1, col: 4 } },
-    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 1, col: 5 } },
-    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 1, col: 6 } },
-    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 1, col: 7 } },
-    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 6, col: 0 } },
-    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 6, col: 1 } },
-    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 6, col: 2 } },
-    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 6, col: 3 } },
-    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 6, col: 4 } },
-    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 6, col: 5 } },
-    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 6, col: 6 } },
-    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Pawn,   }, pos: BoardPosition { row: 6, col: 7 } },
-    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Rook,   }, pos: BoardPosition { row: 7, col: 0 } },
-    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Knight, }, pos: BoardPosition { row: 7, col: 1 } },
-    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Bishop, }, pos: BoardPosition { row: 7, col: 2 } },
-    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Queen,  }, pos: BoardPosition { row: 7, col: 3 } },
-    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::King,   }, pos: BoardPosition { row: 7, col: 4 } },
-    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Bishop, }, pos: BoardPosition { row: 7, col: 5 } },
-    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Knight, }, pos: BoardPosition { row: 7, col: 6 } },
-    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Rook,   }, pos: BoardPosition { row: 7, col: 7 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Rook,        }, pos: BoardPosition { row: 0, col: 0 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Knight,      }, pos: BoardPosition { row: 0, col: 1 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Bishop,      }, pos: BoardPosition { row: 0, col: 2 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Queen,       }, pos: BoardPosition { row: 0, col: 3 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::King,        }, pos: BoardPosition { row: 0, col: 4 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Bishop,      }, pos: BoardPosition { row: 0, col: 5 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Knight,      }, pos: BoardPosition { row: 0, col: 6 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Rook,        }, pos: BoardPosition { row: 0, col: 7 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Pawn(false), }, pos: BoardPosition { row: 1, col: 0 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Pawn(false), }, pos: BoardPosition { row: 1, col: 1 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Pawn(false), }, pos: BoardPosition { row: 1, col: 2 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Pawn(false), }, pos: BoardPosition { row: 1, col: 3 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Pawn(false), }, pos: BoardPosition { row: 1, col: 4 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Pawn(false), }, pos: BoardPosition { row: 1, col: 5 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Pawn(false), }, pos: BoardPosition { row: 1, col: 6 } },
+    PieceConstData { piece: Piece { color: PieceColor::White, kind: PieceKind::Pawn(false), }, pos: BoardPosition { row: 1, col: 7 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Pawn(false), }, pos: BoardPosition { row: 6, col: 0 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Pawn(false), }, pos: BoardPosition { row: 6, col: 1 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Pawn(false), }, pos: BoardPosition { row: 6, col: 2 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Pawn(false), }, pos: BoardPosition { row: 6, col: 3 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Pawn(false), }, pos: BoardPosition { row: 6, col: 4 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Pawn(false), }, pos: BoardPosition { row: 6, col: 5 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Pawn(false), }, pos: BoardPosition { row: 6, col: 6 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Pawn(false), }, pos: BoardPosition { row: 6, col: 7 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Rook,        }, pos: BoardPosition { row: 7, col: 0 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Knight,      }, pos: BoardPosition { row: 7, col: 1 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Bishop,      }, pos: BoardPosition { row: 7, col: 2 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Queen,       }, pos: BoardPosition { row: 7, col: 3 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::King,        }, pos: BoardPosition { row: 7, col: 4 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Bishop,      }, pos: BoardPosition { row: 7, col: 5 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Knight,      }, pos: BoardPosition { row: 7, col: 6 } },
+    PieceConstData { piece: Piece { color: PieceColor::Black, kind: PieceKind::Rook,        }, pos: BoardPosition { row: 7, col: 7 } },
 ];
 
 fn create_pieces(mut commands: Commands, piece_render_data: Res<PiecesRenderData>) {
@@ -191,7 +191,7 @@ fn spawn_piece(
         PieceKind::Rook => &render_data.rook,
         PieceKind::Bishop => &render_data.bishop,
         PieceKind::Knight => &render_data.knight,
-        PieceKind::Pawn => &render_data.pawn,
+        PieceKind::Pawn(_) => &render_data.pawn,
     };
     let mat = match piece.color {
         PieceColor::White => &render_data.white_mat,
@@ -260,10 +260,10 @@ impl PieceMoveEvent {
 
 fn move_pieces(
     mut events: EventReader<PieceMoveEvent>,
-    mut piece_pos_query: Query<(Entity, &Piece, &mut BoardPosition)>,
+    mut piece_pos_query: Query<(Entity, &mut BoardPosition), With<Piece>>,
 ) {
     for event in events.iter() {
-        for (entity, _piece, mut pos) in &mut piece_pos_query {
+        for (entity, mut pos) in &mut piece_pos_query {
             if event.entity == entity {
                 *pos = event.target;
             }
