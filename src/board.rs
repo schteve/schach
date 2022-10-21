@@ -172,15 +172,17 @@ fn render_board(
         ),
         With<Square>,
     >,
-    board_pos_query: Query<&BoardPosition>,
     shadow_squares: Res<ShadowSquares>,
 ) {
-    let piece_pos = turn_data
-        .move_piece
-        .and_then(|piece_ent| board_pos_query.get(piece_ent).ok());
+    let piece_pos = turn_data.move_piece.and_then(|piece_ent| {
+        square_query
+            .get_component::<BoardPosition>(piece_ent)
+            .ok()
+            .copied()
+    });
 
     for (entity, pos, valid_move, mut material) in &mut square_query {
-        if Some(pos) == piece_pos {
+        if Some(*pos) == piece_pos {
             *material = materials.selected_color.clone();
         } else if Some(entity) == hovered_square.entity {
             *material = materials.hovered_color.clone();

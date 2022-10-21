@@ -460,7 +460,9 @@ fn turn_manager(
             }
         }
         TurnState::ShowHighlights => {
-            let (_, piece_pos) = piece_query.get(turn_data.move_piece.unwrap()).unwrap();
+            let piece_pos = piece_query
+                .get_component::<BoardPosition>(turn_data.move_piece.unwrap())
+                .unwrap();
             let piece = game_state
                 .get_pos(*piece_pos)
                 .expect("Entity for piece exists but it's not on the board");
