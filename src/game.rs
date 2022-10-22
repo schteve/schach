@@ -12,10 +12,16 @@ enum MoveCapture {
     Capture,
 }
 
-#[derive(Clone, Copy, Component, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum GameOver {
     Checkmate(PieceColor), // Winner
     Stalemate,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct EnPassant {
+    capture_pos: BoardPosition, // The position that the capture occurs on
+    piece_pos: BoardPosition,   // The piece that may get captured is here
 }
 
 #[derive(Clone, Component, Debug, Default)]
@@ -23,6 +29,7 @@ pub struct GameState {
     pub board: [[Option<Piece>; 8]; 8], // Set of rows (first row is A1-A8, etc)
     pub curr_player: PieceColor,
     pub game_over: Option<GameOver>,
+    pub en_passant: Option<EnPassant>,
 }
 
 impl GameState {
@@ -50,7 +57,11 @@ impl GameState {
         }
     }
 
-    fn apply_movement(&mut self, from_pos: BoardPosition, to_pos: BoardPosition) -> Option<Piece> {
+    fn apply_movement(
+        &mut self,
+        from_pos: BoardPosition,
+        to_pos: BoardPosition,
+    ) -> Option<(Piece, BoardPosition)> {
         assert!(
             from_pos.is_in_bounds(),
             "Moved from out of bounds position: {:?}",
@@ -66,17 +77,65 @@ impl GameState {
         assert!(moving_piece.is_some(), "Moving a non-existent piece");
 
         // Update moving piece to indicate that it has moved
-        let p = moving_piece.as_mut().unwrap();
-        p.kind = match p.kind {
-            PieceKind::Pawn(false) => PieceKind::Pawn(true),
-            x => x,
-        };
+        {
+            // TODO: probably should make a moved property on the piece instead of an inner value. Also works for rooks / king for castling,
+            // and future rules that might apply only to unmoved pieces.
+            let p = moving_piece.as_mut().unwrap();
+            p.kind = match p.kind {
+                PieceKind::Pawn(false) => PieceKind::Pawn(true),
+                x => x,
+            };
+        }
+
+        // A 2-move pawn leaves behind an en passant marker
+        let ep = self.en_passant; // Save previous turn's data for later
+        if matches!(moving_piece.unwrap().kind, PieceKind::Pawn(_))
+            && from_pos.col == to_pos.col
+            && i8::abs_diff(from_pos.row, to_pos.row) == 2
+        {
+            // TODO: put a marker on the generated moves to indicate things like en passant so we don't have to deduce after the fact
+            let en_passant_pos = if from_pos.row < to_pos.row {
+                from_pos + (1, 0)
+            } else {
+                from_pos + (-1, 0)
+            };
+            self.en_passant = Some(EnPassant {
+                capture_pos: en_passant_pos,
+                piece_pos: to_pos,
+            });
+        } else {
+            self.en_passant = None;
+        }
+
+        // If this was an en passant capture then the board update is a bit different.
+        // This check should happen with the PREVIOUS turn's en passant data.
+        let mut en_passant_capture = false;
+        if matches!(moving_piece.unwrap().kind, PieceKind::Pawn(_)) {
+            if let Some(EnPassant { capture_pos, .. }) = ep {
+                if to_pos == capture_pos {
+                    en_passant_capture = true;
+                }
+            }
+        }
 
         // Update board
-        let taken_piece = self.get_pos(to_pos);
-        self.set_pos(from_pos, None);
-        self.set_pos(to_pos, moving_piece);
-        taken_piece
+        if en_passant_capture {
+            let ep = ep.unwrap();
+            let taken_piece = self.get_pos(ep.piece_pos);
+            assert!(
+                taken_piece.is_some(),
+                "There's no piece at the en passant capture location {ep:?}"
+            );
+            self.set_pos(from_pos, None);
+            self.set_pos(ep.piece_pos, None);
+            self.set_pos(to_pos, moving_piece);
+            taken_piece.map(|piece| (piece, ep.piece_pos))
+        } else {
+            let taken_piece = self.get_pos(to_pos);
+            self.set_pos(from_pos, None);
+            self.set_pos(to_pos, moving_piece);
+            taken_piece.map(|piece| (piece, to_pos))
+        }
     }
 
     fn moves_and_captures(
@@ -89,7 +148,7 @@ impl GameState {
         moves.retain(|pos| {
             let mut new_state = self.clone();
             new_state.apply_movement(piece_pos, *pos);
-            new_state.advance_turn();
+            new_state.advance_turn(); // TODO: is it needed? don't think we use the turn state anymore.
             !new_state.is_in_check(piece.color)
         });
 
@@ -184,6 +243,10 @@ impl GameState {
                     if new_pos.is_in_bounds() {
                         if let Some(Piece { color, .. }) = self.get_pos(new_pos) {
                             if color != piece.color {
+                                captures.push(new_pos);
+                            }
+                        } else if let Some(en_passant) = self.en_passant {
+                            if new_pos == en_passant.capture_pos {
                                 captures.push(new_pos);
                             }
                         }
@@ -506,12 +569,11 @@ fn turn_manager(
                                 .unwrap();
                             let target = turn_data.move_target.unwrap();
 
-                            // Move the piece in the game state
-                            let captured_piece = game_state.apply_movement(*source, target);
-                            if captured_piece.is_some() {
-                                // If there's a piece already in the target square, capture it
+                            // Move the piece in the game state, and mark the captured piece (if any)
+                            let captured = game_state.apply_movement(*source, target);
+                            if let Some(cap) = captured {
                                 for (entity, piece_pos) in &piece_query {
-                                    if *piece_pos == target {
+                                    if *piece_pos == cap.1 {
                                         commands.entity(entity).insert(Captured);
                                     }
                                 }
