@@ -56,7 +56,7 @@ impl BoardPosition {
         Self { row: 0, col: 0 }
     }
 
-    fn square_color(&self) -> SquareColor {
+    fn square_color(self) -> SquareColor {
         if (self.row + self.col) % 2 == 0 {
             SquareColor::Black
         } else {

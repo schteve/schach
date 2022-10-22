@@ -494,9 +494,9 @@ fn turn_manager(
         TurnState::CheckForGameOver => {
             if game_state.no_legal_moves() {
                 if game_state.is_in_check(game_state.curr_player) {
-                    game_state.game_over = Some(GameOver::Checkmate(game_state.curr_player.next()))
+                    game_state.game_over = Some(GameOver::Checkmate(game_state.curr_player.next()));
                 } else {
-                    game_state.game_over = Some(GameOver::Stalemate)
+                    game_state.game_over = Some(GameOver::Stalemate);
                 }
             } else {
                 turn_data.state = TurnState::SelectPiece;
